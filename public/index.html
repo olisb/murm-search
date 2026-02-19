@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Murm Search — Regenerative Economy Discovery</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
+</head>
+<body>
+  <header id="header">
+    <div class="header-left">
+      <h1>murm<span class="accent">search</span></h1>
+      <span class="tagline">Discover the regenerative economy</span>
+    </div>
+
+    <!-- Mode toggle -->
+    <div class="mode-switch">
+      <button class="mode-btn active" data-mode="chat">Chat</button>
+      <button class="mode-btn" data-mode="search">Search</button>
+    </div>
+
+    <!-- Search input (search mode only) -->
+    <div class="search-wrap hidden" id="search-wrap">
+      <input type="text" id="search-input" placeholder="e.g. community energy cooperatives in Wales" autocomplete="off" />
+      <div class="search-hint">Press Enter or wait to search</div>
+    </div>
+
+    <div class="header-right">
+      <span id="profile-count" class="count"></span>
+    </div>
+  </header>
+
+  <main id="main">
+    <aside id="sidebar">
+      <!-- Search mode content -->
+      <div id="search-panel" class="hidden">
+        <div id="synthesis" class="synthesis hidden"></div>
+        <div id="results"></div>
+        <div id="empty-state" class="empty-state">
+          <p>Type a query to search <strong>6,000+</strong> organisations in the regenerative economy.</p>
+          <p class="examples">Try: <em>"permaculture projects in France"</em>, <em>"housing cooperatives"</em>, <em>"transition towns UK"</em></p>
+        </div>
+      </div>
+
+      <!-- Chat mode content -->
+      <div id="chat-panel" class="hidden">
+        <div id="chat-messages">
+          <div class="chat-msg assistant chat-welcome" style="visibility:hidden">
+            <div class="chat-bubble">
+              <p>Hi! Ask me anything about organisations in the regenerative economy.</p>
+              <p class="try-query">Try: <a href="#" onclick="fireTryQuery(this); return false;">What community energy cooperatives exist in Wales?</a></p>
+            </div>
+          </div>
+        </div>
+        <div id="chat-input-wrap">
+          <input type="text" id="chat-input" placeholder="Ask about the regenerative economy..." autocomplete="off" />
+          <button id="chat-send" title="Send">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+    <div id="map"></div>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
