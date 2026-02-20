@@ -217,7 +217,57 @@ async function loadData() {
   const buf = await binRes.arrayBuffer();
   embeddings = new Float32Array(buf);
 
+  // Load user-submitted profiles from server file
+  try {
+    const upRes = await fetch("/data/user-profiles.json");
+    if (upRes.ok) {
+      const userEntries = await upRes.json();
+      for (const entry of userEntries) {
+        profiles.push(entry.profile);
+        const userEmb = new Float32Array(entry.embedding);
+        const combined = new Float32Array(embeddings.length + EMBED_DIM);
+        combined.set(embeddings);
+        combined.set(userEmb, embeddings.length);
+        embeddings = combined;
+      }
+    }
+  } catch {}
+
+  // Load user-submitted profiles from localStorage (Vercel mode — needs client-side embedding)
+  try {
+    const stored = JSON.parse(localStorage.getItem("murm-user-profiles") || "[]");
+    if (stored.length > 0) {
+      const model = await initEmbedder();
+      for (const entry of stored) {
+        // Skip if already loaded from server file
+        if (profiles.some((p) => p.profile_url === entry.profile.profile_url)) continue;
+        const p = entry.profile;
+        let emb;
+        if (entry.embedding && entry.embedding.length === EMBED_DIM) {
+          emb = new Float32Array(entry.embedding);
+        } else {
+          const embText = `Organisation or project related to: ${p.name}. ${p.description || ""}. Tags: ${(p.tags || []).join(", ")}`;
+          const output = await model(embText, { pooling: "mean", normalize: true });
+          emb = new Float32Array(output.data);
+          // Cache the embedding back to localStorage
+          entry.embedding = Array.from(emb);
+        }
+        profiles.push(p);
+        const combined = new Float32Array(embeddings.length + EMBED_DIM);
+        combined.set(embeddings);
+        combined.set(emb, embeddings.length);
+        embeddings = combined;
+      }
+      // Save back with cached embeddings
+      localStorage.setItem("murm-user-profiles", JSON.stringify(stored));
+    }
+  } catch (err) {
+    console.error("[user-profiles] localStorage load error:", err);
+  }
+
   countEl.textContent = `${profiles.length.toLocaleString()} orgs`;
+  const emptyCount = document.getElementById("empty-count");
+  if (emptyCount) emptyCount.textContent = profiles.length.toLocaleString();
   buildLocationIndex();
   buildGeoSample();
 }

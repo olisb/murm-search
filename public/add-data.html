@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add Data — Murm Search</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-body">
+  <header id="header">
+    <div class="header-left">
+      <a href="/" class="logo-link"><h1>murm<span class="accent">search</span></h1></a>
+      <span class="tagline">Discover the regenerative economy</span>
+    </div>
+    <div class="mode-switch">
+      <a href="/" class="mode-btn">Chat</a>
+      <a href="/" class="mode-btn">Search</a>
+    </div>
+    <div class="header-right">
+      <nav class="header-nav">
+        <a href="/about.html" class="nav-link">About</a>
+        <a href="/add-data.html" class="nav-link active">Add data</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="page-content">
+    <div class="page-inner">
+      <h2>Add your data</h2>
+
+      <p>To appear in this directory, you need to create a Murmurations profile using the <a href="https://murmurmaps.murmurations.network/profile-generator" target="_blank">profile generator</a>. It takes a few minutes.</p>
+
+      <h3>How to create a profile</h3>
+
+      <ol>
+        <li>Visit the <a href="https://murmurmaps.murmurations.network/profile-generator" target="_blank">Murmurations Profile Generator</a></li>
+        <li>Check you are using the <strong>Production Index</strong> (top right)</li>
+        <li>If you want to host your profile with Murmurations, <strong>Register</strong> first</li>
+        <li>To create a personal profile, select <strong>people_schema-v1.0.0</strong></li>
+        <li>To create an organisation or project profile, select <strong>organizations_schema-v1.0.0</strong></li>
+        <li>Fill in the form fields with as much detail as you'd like shared</li>
+        <li>Click <strong>Validate</strong></li>
+      </ol>
+
+      <h3>Publishing your profile</h3>
+
+      <p>After validation, you have two options:</p>
+
+      <div class="option-box">
+        <h4>Option 1: Host with Murmurations</h4>
+        <p>Name your profile and click <strong>Save & Post</strong>. That's it — your profile will be indexed automatically.</p>
+      </div>
+
+      <div class="option-box">
+        <h4>Option 2: Host on your own site</h4>
+        <ol>
+          <li>Copy the JSON code to a text file and save it as a <code>.json</code> file</li>
+          <li>Upload it to your web server</li>
+          <li>Paste the URL of your profile (e.g. <code>https://yoursite.com/your-profile.json</code>) into the <strong>Add/Update</strong> field of the <a href="https://murmurmaps.murmurations.network/index-updater" target="_blank">Index Updater</a> and click <strong>Post</strong></li>
+        </ol>
+      </div>
+
+      <h3>Add your profile to Murm Search</h3>
+      <p>Already created your profile? Paste the profile URL below to make it searchable immediately.</p>
+
+      <div class="option-box">
+        <form id="add-profile-form">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="url" id="profile-url-input" placeholder="https://data-proxy.murmurations.network/v1/profiles/..." required style="flex:1;padding:10px 12px;background:#0f1210;border:1px solid #2a3630;border-radius:6px;color:#d4ddd6;font-size:14px;">
+            <button type="submit" id="add-profile-btn" style="padding:10px 20px;background:#4ecb71;color:#0f1210;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;white-space:nowrap;">Add profile</button>
+          </div>
+          <div id="add-profile-status" style="margin-top:10px;font-size:14px;"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById("add-profile-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("profile-url-input");
+      const btn = document.getElementById("add-profile-btn");
+      const status = document.getElementById("add-profile-status");
+      const url = input.value.trim();
+      if (!url) return;
+
+      btn.disabled = true;
+      btn.textContent = "Adding...";
+      status.textContent = "";
+      status.style.color = "";
+
+      try {
+        const res = await fetch("/api/add-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || "Failed to add profile");
+        }
+
+        if (data.clientSideEmbed) {
+          // Vercel mode: store profile in localStorage, embedding will happen on search page load
+          const stored = JSON.parse(localStorage.getItem("murm-user-profiles") || "[]");
+          const existingIdx = stored.findIndex((e) => e.profile.profile_url === url);
+          const entry = { profile: data.profile, embedding: null };
+          if (existingIdx >= 0) {
+            stored[existingIdx] = entry;
+          } else {
+            stored.push(entry);
+          }
+          localStorage.setItem("murm-user-profiles", JSON.stringify(stored));
+        }
+
+        status.style.color = "#4ecb71";
+        status.innerHTML = '<strong>' + escHtml(data.profile.name) + '</strong> — Your profile is now searchable! <a href="/" style="color:#4ecb71;">Go to search</a>';
+        input.value = "";
+      } catch (err) {
+        status.style.color = "#e87070";
+        status.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Add profile";
+      }
+    });
+
+    function escHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+  </script>
+</body>
+</html>

@@ -555,6 +555,102 @@ app.get("/api/chat-available", (req, res) => {
 });
 
 // -------------------------------------------------------------------
+// Add profile from URL
+// -------------------------------------------------------------------
+const USER_PROFILES_PATH = path.join(__dirname, "..", "data", "user-profiles.json");
+
+function loadUserProfiles() {
+  try {
+    if (fs.existsSync(USER_PROFILES_PATH)) {
+      return JSON.parse(fs.readFileSync(USER_PROFILES_PATH, "utf-8"));
+    }
+  } catch (err) {
+    console.error("[user-profiles] Failed to load:", err.message);
+  }
+  return [];
+}
+
+function saveUserProfiles(entries) {
+  fs.mkdirSync(path.dirname(USER_PROFILES_PATH), { recursive: true });
+  fs.writeFileSync(USER_PROFILES_PATH, JSON.stringify(entries, null, 2));
+}
+
+let userProfiles = loadUserProfiles();
+console.log(`[user-profiles] Loaded ${userProfiles.length} existing entries`);
+
+app.post("/api/add-profile", async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== "string") {
+      return res.status(400).json({ error: "Missing profile URL" });
+    }
+
+    // Validate URL format
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return res.status(400).json({ error: "Invalid URL format" });
+    }
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return res.status(400).json({ error: "URL must be http or https" });
+    }
+
+    // Fetch the profile JSON
+    let profileData;
+    try {
+      const fetchRes = await fetch(url);
+      if (!fetchRes.ok) {
+        return res.status(400).json({ error: `Could not fetch profile: HTTP ${fetchRes.status}` });
+      }
+      profileData = await fetchRes.json();
+    } catch (err) {
+      return res.status(400).json({ error: `Could not fetch profile: ${err.message}` });
+    }
+
+    // Normalize fields to match our schema
+    const geo = profileData.geolocation || {};
+    const tags = profileData.tags || profileData.keywords || [];
+    const profile = {
+      profile_url: url,
+      name: profileData.name || profileData.title || "Unknown",
+      description: profileData.description || profileData.mission || null,
+      latitude: geo.lat != null ? Number(geo.lat) : (profileData.latitude != null ? Number(profileData.latitude) : null),
+      longitude: geo.lon != null ? Number(geo.lon) : (profileData.longitude != null ? Number(profileData.longitude) : null),
+      locality: profileData.locality || null,
+      region: profileData.region || null,
+      country: profileData.country_name || profileData.country || null,
+      tags: Array.isArray(tags) ? tags : [],
+      primary_url: profileData.primary_url || profileData.url || null,
+      image: profileData.image || null,
+      source: "user-submitted",
+    };
+
+    // Generate embedding
+    const embeddingText = `Organisation or project related to: ${profile.name}. ${profile.description || ""}. Tags: ${profile.tags.join(", ")}`;
+    const embed = await getEmbedder();
+    const output = await embed(embeddingText, { pooling: "mean", normalize: true });
+    const embedding = Array.from(output.data);
+
+    // Deduplicate by profile_url
+    const existingIdx = userProfiles.findIndex((e) => e.profile.profile_url === url);
+    if (existingIdx >= 0) {
+      userProfiles[existingIdx] = { profile, embedding };
+    } else {
+      userProfiles.push({ profile, embedding });
+    }
+
+    saveUserProfiles(userProfiles);
+    console.log(`[user-profiles] ${existingIdx >= 0 ? "Updated" : "Added"}: ${profile.name}`);
+
+    res.json({ ok: true, profile });
+  } catch (err) {
+    console.error("[add-profile] Error:", err);
+    res.status(500).json({ error: `Failed to add profile: ${err.message}` });
+  }
+});
+
+// -------------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`\n  Murm Search running at http://localhost:${PORT}`);

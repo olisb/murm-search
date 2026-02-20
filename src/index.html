@@ -27,8 +27,13 @@
       <div class="search-hint">Press Enter or wait to search</div>
     </div>
 
+    <span id="profile-count" class="count"></span>
+
     <div class="header-right">
-      <span id="profile-count" class="count"></span>
+      <nav class="header-nav">
+        <a href="/about.html" class="nav-link">About</a>
+        <a href="/add-data.html" class="nav-link">Add data</a>
+      </nav>
     </div>
   </header>
 
@@ -39,7 +44,7 @@
         <div id="synthesis" class="synthesis hidden"></div>
         <div id="results"></div>
         <div id="empty-state" class="empty-state">
-          <p>Type a query to search <strong>6,000+</strong> organisations in the regenerative economy.</p>
+          <p>Type a query to search <strong id="empty-count"></strong> organisations in the regenerative economy.</p>
           <p class="examples">Try: <em>"permaculture projects in France"</em>, <em>"housing cooperatives"</em>, <em>"transition towns UK"</em></p>
         </div>
       </div>

@@ -196,7 +196,25 @@ async function loadData() {
   const buf = await binRes.arrayBuffer();
   embeddings = new Float32Array(buf);
 
+  // Load user-submitted profiles
+  try {
+    const upRes = await fetch("/data/user-profiles.json");
+    if (upRes.ok) {
+      const userEntries = await upRes.json();
+      for (const entry of userEntries) {
+        profiles.push(entry.profile);
+        const userEmb = new Float32Array(entry.embedding);
+        const combined = new Float32Array(embeddings.length + EMBED_DIM);
+        combined.set(embeddings);
+        combined.set(userEmb, embeddings.length);
+        embeddings = combined;
+      }
+    }
+  } catch {}
+
   countEl.textContent = `${profiles.length.toLocaleString()} orgs`;
+  const emptyCount = document.getElementById("empty-count");
+  if (emptyCount) emptyCount.textContent = profiles.length.toLocaleString();
   buildLocationIndex();
   buildGeoSample();
 }
