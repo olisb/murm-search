@@ -251,17 +251,19 @@ app.post("/api/embed", async (req, res) => {
 // Chat endpoint
 // -------------------------------------------------------------------
 function buildSystemPrompt() {
-  return `You are a search assistant for the Murmurations network, a directory of ${totalProfiles} organisations in the regenerative economy across ${totalCountries} countries.
+  return `You are the search interface for the Murmurations network, a directory of ${totalProfiles} organisations in the regenerative economy across ${totalCountries} countries.
+
+The user searches by talking to you. Their messages trigger searches automatically and you see the results below. You ARE the search tool — never tell users to "visit the Murmurations website" or "search directly." Never say you "don't have access" to data.
 
 The user sees result cards and a map below your message — don't repeat what's visible there.
 
-You receive the user's query, search metadata, and top results.
+STRICT LIMIT: 30 words or fewer. One or two short sentences only. Plain text. No emoji. No markdown. Talk like a knowledgeable friend.
 
-Reply in one sentence. Make it count. Plain text only — no emoji, no markdown bold, no bullet points, no lists of options. Talk like a knowledgeable friend texting back.
+Add value the cards can't: spot patterns, note gaps, suggest better searches. If results don't match, say so and suggest different terms.
 
-Add value the cards can't: spot patterns, note gaps, suggest better searches, or connect dots. If results don't match, say so plainly and suggest different terms.
+Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.
 
-Only say something if it adds information the user can't already see. Never restate what the user searched for — if they asked for co-ops, don't tell them they're co-ops. If you have nothing genuinely new to add, just state the count and stop. Specific details about individual results are welcome when they're interesting. Generic observations are not.`;
+Only say something if it adds information the user can't already see.`;
 }
 
 
@@ -313,38 +315,160 @@ app.post("/api/chat", async (req, res) => {
 
     const systemPrompt = buildSystemPrompt();
     const client = new Anthropic();
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 150,
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const stream = client.messages.stream({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 80,
       system: systemPrompt,
       messages,
     });
 
-    const text = message.content[0]?.text || "";
-    if (!text) {
-      return res.status(500).json({ error: "Empty response from Claude" });
-    }
+    stream.on("text", (text) => {
+      res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    });
 
-    res.json({ response: text });
+    stream.on("end", () => {
+      res.write("data: [DONE]\n\n");
+      res.end();
+    });
+
+    stream.on("error", (err) => {
+      console.error("[chat] Stream error:", err.message);
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    });
   } catch (err) {
     console.error("[chat] Error:", err.message);
-    res.status(500).json({ error: `Chat failed: ${err.message}` });
+    if (!res.headersSent) {
+      res.status(500).json({ error: `Chat failed: ${err.message}` });
+    }
   }
 });
 
 // -------------------------------------------------------------------
-// Query rewriter + classifier
+// Query understanding (single LLM call replaces classifier + rewriter)
 // -------------------------------------------------------------------
-const REWRITE_PROMPT = `You are a query rewriter for a directory search tool. The user is having a conversation about finding organisations.
+const UNDERSTAND_PROMPT = `You are the query understanding layer for a search tool that searches a directory of ${totalProfiles} organisations in the regenerative economy across ${totalCountries} countries.
 
-Given the conversation history and the user's latest message, output ONLY the full search query that captures what they're actually looking for. No explanation, just the search terms.
+Given the user's message and conversation history, determine what they want and return ONLY a JSON object.
+
+Return this JSON structure:
+{
+  "action": "search" | "chat",
+  "geo": ["location1"] or [],
+  "topic": "search terms" or "",
+  "queryType": "geo-only" | "topic-only" | "geo+topic",
+  "showAll": true | false,
+  "chatResponse": "only if action is chat, otherwise omit"
+}
+
+Rules:
+- action is "search" for ANY message that mentions a topic, category, type of org, or location. This tool exists to search. Default to search.
+- action is "chat" ONLY for pure greetings ("hi"), meta-questions about the tool ("what is this", "how does this work"), or feedback ("thanks", "cool")
+- NEVER set action to "chat" when the message contains a searchable noun
+- geo: extract location names. Resolve aliases: "UK" → ["England","Scotland","Wales","Northern Ireland"], "US"/"USA"/"america" → ["United States"], "deutschland" → ["Germany"], etc. Use the location names as they appear in the database.
+- topic: extract the subject matter, ignoring location words and filler. "show me all the orgs you have in australia" → topic is "", geo is ["Australia"], queryType is "geo-only", showAll is true
+- When the user says "show me all/everything" or "what have you got" with only a location, set showAll: true, queryType: "geo-only", topic: ""
+- queryType: "geo-only" if geo but no topic, "topic-only" if topic but no geo, "geo+topic" if both
+- Look at conversation history to resolve follow-ups: "in the USA?" after "renewable energy worldwide" → geo: ["United States"], topic: "renewable energy", queryType: "geo+topic"
+- But detect NEW topics: "ok try open source projects" after energy discussion → topic: "open source", geo: [], queryType: "topic-only" (don't carry old geo)
+- "is [X] in your data" or "do you have [X]" → search for X
+- "show me all [X] you know about" → search for X
+- "do you know about [X]" → search for X
+- For chat responses: be brief and warm. One sentence. You help people search a directory of organisations in the regenerative economy. Guide them toward searching. No emoji.`;
+
+app.post("/api/understand", async (req, res) => {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return res.json({ action: "search", geo: [], topic: req.body.message, queryType: "topic-only", showAll: false });
+  }
+
+  try {
+    const { message, history = [], sampleLocations = "" } = req.body;
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ error: "Missing message" });
+    }
+
+    const locationContext = sampleLocations
+      ? `\n\nKnown locations in the database (sample):\n${sampleLocations}`
+      : "";
+
+    const messages = [];
+    for (const msg of history.slice(-6)) {
+      messages.push({ role: msg.role, content: msg.content });
+    }
+    messages.push({ role: "user", content: message });
+
+    const client = new Anthropic();
+    const result = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 200,
+      system: UNDERSTAND_PROMPT + locationContext,
+      messages,
+    });
+
+    const text = (result.content[0]?.text || "").trim();
+    console.log('[understand]', { message, response: text, historyLength: messages.length });
+
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('[understand] No JSON found:', text);
+      return res.json({ action: "search", geo: [], topic: message, queryType: "topic-only", showAll: false });
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    res.json(parsed);
+  } catch (err) {
+    console.error("[understand] Error:", err.message);
+    res.json({ action: "search", geo: [], topic: req.body.message, queryType: "topic-only", showAll: false });
+  }
+});
+
+// -------------------------------------------------------------------
+// Query rewriter + classifier (legacy, kept for backward compat)
+// -------------------------------------------------------------------
+const REWRITE_PROMPT = `You rewrite user messages into search queries for an organisation directory. Output ONLY the search terms — no explanation, no quotes.
+
+CRITICAL: almost everything is a SEARCH. The user came here to search. If the message contains ANY topic, subject, or thing to look for — it is a search. Extract the search terms.
+
+NOT_A_SEARCH is ONLY for messages with NO searchable topic at all:
+- Pure greetings: "hi", "hey", "how are you", "thanks", "cool"
+- Tool questions: "what is this", "how does this work"
+- Off-topic: "what's the weather", "tell me a joke"
+
+These are ALL searches — extract the topic:
+- "show me X" / "show me all X" → X
+- "do you know about X" / "know any X" → X
+- "is X in your data/directory" / "do you have X" → X
+- "list all X" / "what X do you have" → X
+- "are there any X" / "any X" → X
+- "I'm looking for X" / "I want to find X" → X
+- "what about X" → X (or combine with previous context if it's a refinement)
+
+KEY RULE: if the message contains a real-world topic noun (like "open source", "cooperatives", "energy", "vegan", "housing", "permaculture", "transition towns", or ANY other subject), it is ALWAYS a search — no matter how conversationally phrased.
+
+CONTEXT — refinements vs new topics:
+- REFINEMENTS carry context: "any in the US", "what about france", "how about berlin", "more like that" → combine with previous topic.
+- NEW TOPICS start fresh: completely different subject, or phrases like "try looking for", "now search", "instead", "something else", or zero keyword overlap with previous topic → output ONLY the new terms.
 
 Examples:
-- History: user searched "renewable energy" → user says "any in cambridge" → Output: "renewable energy cambridge"
-- History: user searched "co-ops in scotland" → user says "what about housing?" → Output: "housing co-ops in scotland"
-- History: none → user says "solar panels france" → Output: "solar panels france"
-- History: user searched "food co-ops london" → user says "how about brighton" → Output: "food co-ops brighton"
-- If the message is general chat (greetings, questions about the tool, not a search): Output exactly NOT_A_SEARCH`;
+- "renewable energy" → user says "any in cambridge" → "renewable energy cambridge"
+- "co-ops in scotland" → "what about housing?" → "housing co-ops in scotland"
+- "solar panels france" → "solar panels france"
+- "food co-ops london" → "how about brighton" → "food co-ops brighton"
+- "renewable energy US" → "ok try looking for open source projects" → "open source projects"
+- "vegan berlin" → "now show me cooperatives" → "cooperatives"
+- "do you know about any open source projects or orgs" → "open source"
+- "show me all open source orgs you know about" → "open source"
+- "is murmurations listed in your data" → "murmurations"
+- "are there any housing cooperatives" → "housing cooperatives"
+- "what open source projects exist" → "open source"
+- "hi" → NOT_A_SEARCH
+- "thanks that's helpful" → NOT_A_SEARCH`;
 
 app.post("/api/rewrite", async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -411,7 +535,7 @@ app.post("/api/chat-conversational", async (req, res) => {
     const message = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 150,
-      system: `You are a friendly assistant for the Murmurations network directory — a searchable database of ${totalProfiles.toLocaleString()} organisations (cooperatives, community projects, Transition Towns, social enterprises) across ${totalCountries} countries. You help people find organisations by topic and location. Keep responses brief and warm. If someone greets you, say hi and tell them what you can help with. Guide them toward searching. Never use emoji. Never use markdown bold, bullet points, or lists. Talk in plain sentences. One sentence for casual chat. Don't explain what the Murmurations network is unless specifically asked.`,
+      system: `You are a friendly assistant for the Murmurations network directory — a searchable database of ${totalProfiles.toLocaleString()} organisations (cooperatives, community projects, Transition Towns, social enterprises) across ${totalCountries} countries. You help people find organisations by topic and location. Keep responses brief and warm. If someone greets you, say hi and tell them what you can help with. Guide them toward searching. Never use emoji. Never use markdown bold, bullet points, or lists. Talk in plain sentences. One sentence for casual chat. Don't explain what the Murmurations network is unless specifically asked. You ARE the search interface — never tell users to "visit the Murmurations website" or "search directly", they are already searching through you. Never say you "don't have access" to the data. Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset.`,
       messages,
     });
 

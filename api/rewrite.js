@@ -1,15 +1,43 @@
 const Anthropic = require("@anthropic-ai/sdk");
 
-const REWRITE_PROMPT = `You are a query rewriter for a directory search tool. The user is having a conversation about finding organisations.
+const REWRITE_PROMPT = `You rewrite user messages into search queries for an organisation directory. Output ONLY the search terms — no explanation, no quotes.
 
-Given the conversation history and the user's latest message, output ONLY the full search query that captures what they're actually looking for. No explanation, just the search terms.
+CRITICAL: almost everything is a SEARCH. The user came here to search. If the message contains ANY topic, subject, or thing to look for — it is a search. Extract the search terms.
+
+NOT_A_SEARCH is ONLY for messages with NO searchable topic at all:
+- Pure greetings: "hi", "hey", "how are you", "thanks", "cool"
+- Tool questions: "what is this", "how does this work"
+- Off-topic: "what's the weather", "tell me a joke"
+
+These are ALL searches — extract the topic:
+- "show me X" / "show me all X" → X
+- "do you know about X" / "know any X" → X
+- "is X in your data/directory" / "do you have X" → X
+- "list all X" / "what X do you have" → X
+- "are there any X" / "any X" → X
+- "I'm looking for X" / "I want to find X" → X
+- "what about X" → X (or combine with previous context if it's a refinement)
+
+KEY RULE: if the message contains a real-world topic noun (like "open source", "cooperatives", "energy", "vegan", "housing", "permaculture", "transition towns", or ANY other subject), it is ALWAYS a search — no matter how conversationally phrased.
+
+CONTEXT — refinements vs new topics:
+- REFINEMENTS carry context: "any in the US", "what about france", "how about berlin", "more like that" → combine with previous topic.
+- NEW TOPICS start fresh: completely different subject, or phrases like "try looking for", "now search", "instead", "something else", or zero keyword overlap with previous topic → output ONLY the new terms.
 
 Examples:
-- History: user searched "renewable energy" → user says "any in cambridge" → Output: "renewable energy cambridge"
-- History: user searched "co-ops in scotland" → user says "what about housing?" → Output: "housing co-ops in scotland"
-- History: none → user says "solar panels france" → Output: "solar panels france"
-- History: user searched "food co-ops london" → user says "how about brighton" → Output: "food co-ops brighton"
-- If the message is general chat (greetings, questions about the tool, not a search): Output exactly NOT_A_SEARCH`;
+- "renewable energy" → user says "any in cambridge" → "renewable energy cambridge"
+- "co-ops in scotland" → "what about housing?" → "housing co-ops in scotland"
+- "solar panels france" → "solar panels france"
+- "food co-ops london" → "how about brighton" → "food co-ops brighton"
+- "renewable energy US" → "ok try looking for open source projects" → "open source projects"
+- "vegan berlin" → "now show me cooperatives" → "cooperatives"
+- "do you know about any open source projects or orgs" → "open source"
+- "show me all open source orgs you know about" → "open source"
+- "is murmurations listed in your data" → "murmurations"
+- "are there any housing cooperatives" → "housing cooperatives"
+- "what open source projects exist" → "open source"
+- "hi" → NOT_A_SEARCH
+- "thanks that's helpful" → NOT_A_SEARCH`;
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {

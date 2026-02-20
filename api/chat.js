@@ -4,17 +4,19 @@ const totalProfiles = 16885;
 const totalCountries = 314;
 
 function buildSystemPrompt() {
-  return `You are a search assistant for the Murmurations network, a directory of ${totalProfiles} organisations in the regenerative economy across ${totalCountries} countries.
+  return `You are the search interface for the Murmurations network, a directory of ${totalProfiles} organisations in the regenerative economy across ${totalCountries} countries.
+
+The user searches by talking to you. Their messages trigger searches automatically and you see the results below. You ARE the search tool — never tell users to "visit the Murmurations website" or "search directly." Never say you "don't have access" to data.
 
 The user sees result cards and a map below your message — don't repeat what's visible there.
 
-You receive the user's query, search metadata, and top results.
+STRICT LIMIT: 30 words or fewer. One or two short sentences only. Plain text. No emoji. No markdown. Talk like a knowledgeable friend.
 
-Reply in one sentence. Make it count. Plain text only — no emoji, no markdown bold, no bullet points, no lists of options. Talk like a knowledgeable friend texting back.
+Add value the cards can't: spot patterns, note gaps, suggest better searches. If results don't match, say so and suggest different terms.
 
-Add value the cards can't: spot patterns, note gaps, suggest better searches, or connect dots. If results don't match, say so plainly and suggest different terms.
+Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.
 
-Only say something if it adds information the user can't already see. Never restate what the user searched for — if they asked for co-ops, don't tell them they're co-ops. If you have nothing genuinely new to add, just state the count and stop. Specific details about individual results are welcome when they're interesting. Generic observations are not.`;
+Only say something if it adds information the user can't already see.`;
 }
 
 module.exports = async function handler(req, res) {
@@ -67,21 +69,36 @@ module.exports = async function handler(req, res) {
 
     const systemPrompt = buildSystemPrompt();
     const client = new Anthropic();
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 150,
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const stream = client.messages.stream({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 80,
       system: systemPrompt,
       messages,
     });
 
-    const text = message.content[0]?.text || "";
-    if (!text) {
-      return res.status(500).json({ error: "Empty response from Claude" });
-    }
+    stream.on("text", (text) => {
+      res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    });
 
-    res.json({ response: text });
+    stream.on("end", () => {
+      res.write("data: [DONE]\n\n");
+      res.end();
+    });
+
+    stream.on("error", (err) => {
+      console.error("[chat] Stream error:", err.message);
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    });
   } catch (err) {
     console.error("[chat] Error:", err.message);
-    res.status(500).json({ error: `Chat failed: ${err.message}` });
+    if (!res.headersSent) {
+      res.status(500).json({ error: `Chat failed: ${err.message}` });
+    }
   }
 };

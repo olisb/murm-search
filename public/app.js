@@ -27,6 +27,7 @@ let chatHistory = [];     // conversation history for LLM context
 let penalties = {};       // profile_url -> multiplier
 let reportedThisSession = new Set(); // profile_urls reported in this session
 let lastQuery = "";       // track current query for report context
+let geoSample = "";       // sample of known locations for LLM
 
 // -------------------------------------------------------------------
 // Browser-side embedding model
@@ -218,6 +219,30 @@ async function loadData() {
 
   countEl.textContent = `${profiles.length.toLocaleString()} orgs`;
   buildLocationIndex();
+  buildGeoSample();
+}
+
+function buildGeoSample() {
+  const countries = new Set();
+  const regionCounts = {};
+  const cityCounts = {};
+
+  for (const p of profiles) {
+    if (p.country) countries.add(p.country);
+    if (p.region) regionCounts[p.region] = (regionCounts[p.region] || 0) + 1;
+    if (p.locality) cityCounts[p.locality] = (cityCounts[p.locality] || 0) + 1;
+  }
+
+  const topRegions = Object.entries(regionCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 100)
+    .map(([name]) => name);
+  const topCities = Object.entries(cityCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 100)
+    .map(([name]) => name);
+
+  geoSample = `Countries: ${[...countries].sort().join(", ")}. Regions: ${topRegions.join(", ")}. Cities: ${topCities.join(", ")}`;
 }
 
 async function loadPenalties() {
@@ -269,8 +294,8 @@ function initMap() {
 
   map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+  // Background layer added after data loads — see init()
   map.on("load", () => {
-    addBackgroundLayer();
     setupBackgroundClicks();
   });
 }
@@ -416,12 +441,24 @@ function topicKeywordBoost(profile, topicWords) {
   return matches / topicWords.length;
 }
 
-function searchProfiles(queryEmbedding, query, topK) {
-  const geoTerms = extractGeoTerms(query);
-  const topicWords = extractTopicWords(query, geoTerms);
+function searchProfiles(queryEmbedding, query, topK, llmParams) {
+  let geoTerms, topicWords, queryType;
+
+  if (llmParams && llmParams.geo) {
+    // LLM-provided params: use directly
+    geoTerms = llmParams.geo.map(g => g.toLowerCase());
+    topicWords = llmParams.topic ? extractTopicWords(llmParams.topic, []) : [];
+    queryType = llmParams.queryType || (geoTerms.length > 0 && topicWords.length > 0 ? "geo+topic" : geoTerms.length > 0 ? "geo-only" : "topic-only");
+  } else {
+    // Fallback: extract from query string (used by search mode and no-API-key)
+    geoTerms = extractGeoTerms(query);
+    topicWords = extractTopicWords(query, geoTerms);
+    const hasTopic = topicWords.length > 0;
+    queryType = geoTerms.length > 0 && !hasTopic ? "geo-only" : geoTerms.length > 0 && hasTopic ? "geo+topic" : "topic-only";
+  }
+
   let geoNote = null;
   const hasTopicWords = topicWords.length > 0;
-  const queryType = geoTerms.length > 0 && !hasTopicWords ? "geo-only" : geoTerms.length > 0 && hasTopicWords ? "geo+topic" : "topic-only";
 
   function scoreProfile(idx, geoMultiplier) {
     const semantic = cosineSimilarity(queryEmbedding, idx * EMBED_DIM);
@@ -966,73 +1003,50 @@ async function handleChat(query) {
   addThinkingBubble();
 
   try {
-    // Step 1: Rewrite/classify the query
-    let searchQuery = query;
-    let isChat = false;
+    // Step 1: Understand the query (single LLM call for classification + rewriting + geo/topic extraction)
+    let llmResult = null;
 
     if (chatAvailable) {
       try {
-        const rwRes = await fetch("/api/rewrite", {
+        const uRes = await fetch("/api/understand", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, history: chatHistory.slice(-4) }),
+          body: JSON.stringify({ message: query, history: chatHistory.slice(-6), sampleLocations: geoSample }),
         });
-        const rwData = await rwRes.json();
-        isChat = rwData.isChat;
-        if (!isChat) searchQuery = rwData.query;
-
-        // Override: if any word in original or rewritten query matches a known location, it's a search
-        if (isChat && knownLocations) {
-          const combined = (query + " " + searchQuery).toLowerCase().replace(/['']/g, "");
-          const words = combined.split(/\s+/).filter((w) => w.length >= 3);
-          const aliasKeys = new Set(Object.keys(GEO_ALIASES));
-          const hasGeoMatch = words.some((w) => knownLocations.has(w) || aliasKeys.has(w)) ||
-            words.some((_, i) => i < words.length - 1 && (knownLocations.has(words[i] + " " + words[i + 1]) || aliasKeys.has(words[i] + " " + words[i + 1])));
-          if (hasGeoMatch) {
-            isChat = false;
-            searchQuery = rwData.query !== "NOT_A_SEARCH" ? rwData.query : query;
-          }
-        }
+        llmResult = await uRes.json();
+        console.log('[understand]', llmResult);
       } catch (err) {
-        console.error("Rewrite error:", err);
+        console.error("Understand error:", err);
       }
     }
 
-    // Step 2: If it's general chat, respond conversationally (no search)
-    if (isChat) {
+    // Step 2: If chat, show response directly (no search needed)
+    if (llmResult?.action === "chat") {
       chatHistory.push({ role: "user", content: query });
-      try {
-        const res = await fetch("/api/chat-conversational", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, history: chatHistory.slice(-10) }),
-        });
-        const data = await res.json();
-        removeThinkingBubble();
-        if (data.response) {
-          addChatMessage("assistant", `<div class="chat-bubble">${escHtml(data.response)}</div>`);
-          chatHistory.push({ role: "assistant", content: data.response });
-        } else {
-          addAssistantError(data.error || "Something went wrong.");
-        }
-      } catch (err) {
-        console.error("Conversational chat error:", err);
-        removeThinkingBubble();
-        addAssistantError("Something went wrong. Please try again.");
-      }
+      removeThinkingBubble();
+      const response = llmResult.chatResponse || "I can help you search for organisations. What are you looking for?";
+      addChatMessage("assistant", `<div class="chat-bubble">${escHtml(response)}</div>`);
+      chatHistory.push({ role: "assistant", content: response });
       chatBusy = false;
       sendBtn.disabled = false;
       chatInput.focus();
       return;
     }
 
-    // Step 3: Run search pipeline with the (possibly rewritten) query
-    const queryEmb = await embedQuery(searchQuery);
-    const searchResult = searchProfiles(queryEmb, searchQuery, TOP_K_DISPLAY);
+    // Step 3: Run search pipeline
+    const searchTopic = llmResult?.topic || query;
+    let queryEmb = null;
+    if (!llmResult || llmResult.queryType !== "geo-only") {
+      queryEmb = await embedQuery(searchTopic);
+    }
+
+    const searchResult = llmResult
+      ? searchProfiles(queryEmb, searchTopic, TOP_K_DISPLAY, llmResult)
+      : searchProfiles(queryEmb, query, TOP_K_DISPLAY);
     let { results: allResults, geoNote, geoTerms, topicWords, queryType, totalGeoMatches, originalTopicWords } = searchResult;
 
     // Debug: log top 5 results with scores
-    console.log('[search]', { query: searchQuery, queryType, geoTerms, topicWords, totalResults: allResults.length });
+    console.log('[search]', { query: searchTopic, queryType, geoTerms, topicWords, totalResults: allResults.length });
     allResults.slice(0, 5).forEach((r, i) => {
       console.log(`  #${i+1} "${r.profile.name}" semantic=${r.rawSemantic.toFixed(3)} kwBoost=${r.kwBoost.toFixed(3)} score=${r.score.toFixed(3)}`);
     });
@@ -1093,7 +1107,7 @@ async function handleChat(query) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            query: searchQuery,
+            query: query,
             profiles: llmProfiles,
             totalResults: totalGeoMatches || allResults.length,
             geoNote: geoNote || null,
@@ -1104,19 +1118,57 @@ async function handleChat(query) {
           }),
         });
 
-        const data = await res.json();
         removeThinkingBubble();
 
-        if (data.error) {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
           console.error("Chat API error:", data.error);
-          addAssistantError(data.error);
+          addAssistantError(data.error || "Something went wrong.");
           addSearchOnlyResponse(allResults, geoNote);
-        } else if (data.response) {
-          addAssistantResponse(data.response, allResults);
-          chatHistory.push({ role: "assistant", content: data.response });
         } else {
-          console.error("Unexpected chat response:", data);
-          addSearchOnlyResponse(allResults, geoNote);
+          // Stream the response
+          const cardsHtml = buildMiniCardsHtml(allResults);
+          const msg = addChatMessage("assistant",
+            `<div class="chat-bubble"></div>
+             <div class="chat-profiles">${cardsHtml}</div>`);
+          attachMiniCardClicks(msg);
+          const bubble = msg.querySelector(".chat-bubble");
+          let fullText = "";
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop();
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              const payload = line.slice(6);
+              if (payload === "[DONE]") continue;
+              try {
+                const chunk = JSON.parse(payload);
+                if (chunk.error) {
+                  console.error("Chat stream error:", chunk.error);
+                  continue;
+                }
+                if (chunk.text) {
+                  fullText += chunk.text;
+                  bubble.textContent = fullText;
+                  msg.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+              } catch (e) {}
+            }
+          }
+
+          if (fullText) {
+            chatHistory.push({ role: "assistant", content: fullText });
+          } else {
+            addSearchOnlyResponse(allResults, geoNote);
+          }
         }
       } catch (err) {
         console.error("Chat fetch error:", err);
@@ -1173,6 +1225,13 @@ function setMode(mode) {
 async function init() {
   initMap();
   await Promise.all([loadData(), checkChatAvailable(), loadPenalties(), initEmbedder()]);
+
+  // Add background dots now that data is loaded
+  if (map.loaded()) {
+    addBackgroundLayer();
+  } else {
+    map.on("load", () => addBackgroundLayer());
+  }
 
   document.querySelectorAll(".mode-btn").forEach((btn) => {
     btn.addEventListener("click", () => setMode(btn.dataset.mode));
