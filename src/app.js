@@ -105,17 +105,21 @@ function profileMatchesGeo(profile, geoTerms) {
     .map((s) => s.toLowerCase());
 
   for (const term of geoTerms) {
-    // Build regex: term must appear at a word boundary (start/end of string
-    // or preceded/followed by space, /, comma, semicolon, or hyphen).
-    // This handles: "Berlin" = exact, "Berlin-Mitte" = district, "Berlin/Köln" = compound,
-    // but NOT "Überlingen" (term embedded in a longer word).
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp("(?:^|[\\s/,;-])" + escaped + "(?:$|[\\s/,;-])");
     for (const field of fields) {
-      if (re.test(field)) return true;
+      if (field.includes(term)) return true;
     }
   }
   return false;
+}
+
+// Split composite location strings like "England: London &amp; SE | United Kingdom"
+// into clean individual place names: ["england", "london", "se", "united kingdom"]
+function splitLocationSegments(value) {
+  return value
+    .replace(/&amp;/g, "&")
+    .split(/[:|&|]/)
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s.length >= 2);
 }
 
 // Built once after profiles load — all unique location values from the dataset
@@ -124,11 +128,10 @@ let knownLocations = null;
 function buildLocationIndex() {
   knownLocations = new Set();
   for (const p of profiles) {
-    if (p.locality) knownLocations.add(p.locality.toLowerCase().trim());
-    if (p.region) knownLocations.add(p.region.toLowerCase().trim());
-    if (p.country) knownLocations.add(p.country.toLowerCase().trim());
+    if (p.locality) splitLocationSegments(p.locality).forEach((s) => knownLocations.add(s));
+    if (p.region) splitLocationSegments(p.region).forEach((s) => knownLocations.add(s));
+    if (p.country) splitLocationSegments(p.country).forEach((s) => knownLocations.add(s));
   }
-
 }
 
 function extractGeoTerms(query) {
@@ -225,9 +228,15 @@ function buildGeoSample() {
   const cityCounts = {};
 
   for (const p of profiles) {
-    if (p.country) countries.add(p.country);
-    if (p.region) regionCounts[p.region] = (regionCounts[p.region] || 0) + 1;
-    if (p.locality) cityCounts[p.locality] = (cityCounts[p.locality] || 0) + 1;
+    if (p.country) splitLocationSegments(p.country).forEach((s) => countries.add(s));
+    if (p.region) {
+      const segments = splitLocationSegments(p.region);
+      for (const s of segments) regionCounts[s] = (regionCounts[s] || 0) + 1;
+    }
+    if (p.locality) {
+      const segments = splitLocationSegments(p.locality);
+      for (const s of segments) cityCounts[s] = (cityCounts[s] || 0) + 1;
+    }
   }
 
   const topRegions = Object.entries(regionCounts)

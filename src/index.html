@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Murm Search — Regenerative Economy Discovery</title>
+  <title>CoBot — find co-ops, commons & community organisations worldwide</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css">
   <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
@@ -11,8 +11,8 @@
 <body>
   <header id="header">
     <div class="header-left">
-      <h1>murm<span class="accent">search</span></h1>
-      <span class="tagline">Discover the regenerative economy</span>
+      <h1>Co<span class="accent">Bot</span></h1>
+      <span class="tagline">find co-ops, commons & community organisations worldwide</span>
     </div>
 
     <!-- Mode toggle -->
@@ -33,6 +33,7 @@
       <nav class="header-nav">
         <a href="/about.html" class="nav-link">About</a>
         <a href="/add-data.html" class="nav-link">Add data</a>
+        <a href="https://opencollective.com/murmurations" target="_blank" rel="noopener" class="nav-link">Donate</a>
       </nav>
     </div>
   </header>
@@ -44,7 +45,7 @@
         <div id="synthesis" class="synthesis hidden"></div>
         <div id="results"></div>
         <div id="empty-state" class="empty-state">
-          <p>Type a query to search <strong id="empty-count"></strong> organisations in the regenerative economy.</p>
+          <p>Type a query to search <strong id="empty-count"></strong> co-ops, commons & community organisations worldwide.</p>
           <p class="examples">Try: <em>"permaculture projects in France"</em>, <em>"housing cooperatives"</em>, <em>"transition towns UK"</em></p>
         </div>
       </div>
@@ -54,13 +55,13 @@
         <div id="chat-messages">
           <div class="chat-msg assistant chat-welcome" style="visibility:hidden">
             <div class="chat-bubble">
-              <p>Hi! Ask me anything about organisations in the regenerative economy.</p>
+              <p>Hey! I'm CoBot — I search a directory of co-ops, community projects and commons organisations worldwide. Try things like "community energy in Wales" or "open source projects in Berlin" or just name a place to see what's there.</p>
               <p class="try-query">Try: <a href="#" onclick="fireTryQuery(this); return false;">What community energy cooperatives exist in Wales?</a></p>
             </div>
           </div>
         </div>
         <div id="chat-input-wrap">
-          <input type="text" id="chat-input" placeholder="Ask about the regenerative economy..." autocomplete="off" />
+          <input type="text" id="chat-input" placeholder="Ask CoBot anything..." autocomplete="off" />
           <button id="chat-send" title="Send">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>

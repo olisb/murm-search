@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Add Data — Murm Search</title>
+  <title>Add Data — CoBot</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="page-body">
   <header id="header">
     <div class="header-left">
-      <a href="/" class="logo-link"><h1>murm<span class="accent">search</span></h1></a>
-      <span class="tagline">Discover the regenerative economy</span>
+      <a href="/" class="logo-link"><h1>Co<span class="accent">Bot</span></h1></a>
+      <span class="tagline">find co-ops, commons & community organisations worldwide</span>
     </div>
     <div class="mode-switch">
       <a href="/" class="mode-btn">Chat</a>
@@ -20,6 +20,7 @@
       <nav class="header-nav">
         <a href="/about.html" class="nav-link">About</a>
         <a href="/add-data.html" class="nav-link active">Add data</a>
+        <a href="https://opencollective.com/murmurations" target="_blank" rel="noopener" class="nav-link">Donate</a>
       </nav>
     </div>
   </header>
@@ -60,13 +61,13 @@
         </ol>
       </div>
 
-      <h3>Add your profile to Murm Search</h3>
+      <h3>Add your profile to CoBot</h3>
       <p>Already created your profile? Paste the profile URL below to make it searchable immediately.</p>
 
       <div class="option-box">
         <form id="add-profile-form">
           <div style="display:flex;gap:8px;align-items:center;">
-            <input type="url" id="profile-url-input" placeholder="https://data-proxy.murmurations.network/v1/profiles/..." required style="flex:1;padding:10px 12px;background:#0f1210;border:1px solid #2a3630;border-radius:6px;color:#d4ddd6;font-size:14px;">
+            <input type="url" id="profile-url-input" placeholder="https://yoursite.com/your-profile.json" required style="flex:1;padding:10px 12px;background:#0f1210;border:1px solid #2a3630;border-radius:6px;color:#d4ddd6;font-size:14px;">
             <button type="submit" id="add-profile-btn" style="padding:10px 20px;background:#4ecb71;color:#0f1210;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;white-space:nowrap;">Add profile</button>
           </div>
           <div id="add-profile-status" style="margin-top:10px;font-size:14px;"></div>

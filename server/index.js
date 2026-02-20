@@ -146,7 +146,7 @@ app.get("/admin", (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Murm Search — Admin Reports</title>
+<title>CoBot — Admin Reports</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f1210; color: #d4ddd6; padding: 24px; }
@@ -174,7 +174,7 @@ app.get("/admin", (req, res) => {
 </head>
 <body>
   <a href="/" class="back">← Back to search</a>
-  <h1>murm<span>search</span> reports</h1>
+  <h1>Co<span>Bot</span> reports</h1>
   <div class="summary">
     <div class="stat"><strong>${deadCount}</strong>Dead links</div>
     <div class="stat"><strong>${irrelCount}</strong>Irrelevant flags</div>
@@ -251,7 +251,7 @@ app.post("/api/embed", async (req, res) => {
 // Chat endpoint
 // -------------------------------------------------------------------
 function buildSystemPrompt() {
-  return `You are the search interface for the Murmurations network, a directory of ${totalProfiles} organisations in the regenerative economy across ${totalCountries} countries.
+  return `You are CoBot, a search tool for the Murmurations network — a directory of ${totalProfiles} co-ops, commons and community organisations across ${totalCountries} countries.
 
 The user searches by talking to you. Their messages trigger searches automatically and you see the results below. You ARE the search tool — never tell users to "visit the Murmurations website" or "search directly." Never say you "don't have access" to data.
 
@@ -352,7 +352,7 @@ app.post("/api/chat", async (req, res) => {
 // -------------------------------------------------------------------
 // Query understanding (single LLM call replaces classifier + rewriter)
 // -------------------------------------------------------------------
-const UNDERSTAND_PROMPT = `You are the query understanding layer for a search tool that searches a directory of ${totalProfiles} organisations in the regenerative economy across ${totalCountries} countries.
+const UNDERSTAND_PROMPT = `You are the query understanding layer for CoBot, a search tool for the Murmurations network — a directory of ${totalProfiles} co-ops, commons and community organisations across ${totalCountries} countries.
 
 Given the user's message and conversation history, determine what they want and return ONLY a JSON object.
 
@@ -370,7 +370,7 @@ Rules:
 - action is "search" for ANY message that mentions a topic, category, type of org, or location. This tool exists to search. Default to search.
 - action is "chat" ONLY for pure greetings ("hi"), meta-questions about the tool ("what is this", "how does this work"), or feedback ("thanks", "cool")
 - NEVER set action to "chat" when the message contains a searchable noun
-- geo: extract location names. Resolve aliases: "UK" → ["England","Scotland","Wales","Northern Ireland"], "US"/"USA"/"america" → ["United States"], "deutschland" → ["Germany"], etc. Use the location names as they appear in the database.
+- geo: extract location names as simple place names only — "london", "berlin", "paris" — never composite strings like "England: London & SE". Resolve aliases: "UK" → ["England","Scotland","Wales","Northern Ireland"], "US"/"USA"/"america" → ["United States"], "deutschland" → ["Germany"], etc. Use the location names as they appear in the database.
 - topic: extract the subject matter, ignoring location words and filler. "show me all the orgs you have in australia" → topic is "", geo is ["Australia"], queryType is "geo-only", showAll is true
 - When the user says "show me all/everything" or "what have you got" with only a location, set showAll: true, queryType: "geo-only", topic: ""
 - queryType: "geo-only" if geo but no topic, "topic-only" if topic but no geo, "geo+topic" if both
@@ -379,7 +379,7 @@ Rules:
 - "is [X] in your data" or "do you have [X]" → search for X
 - "show me all [X] you know about" → search for X
 - "do you know about [X]" → search for X
-- For chat responses: be brief and warm. One sentence. You help people search a directory of organisations in the regenerative economy. Guide them toward searching. No emoji.`;
+- For chat responses: be brief and warm. One sentence. You are CoBot and you help people search a directory of co-ops, commons and community organisations. Guide them toward searching. No emoji.`;
 
 app.post("/api/understand", async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -535,7 +535,7 @@ app.post("/api/chat-conversational", async (req, res) => {
     const message = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 150,
-      system: `You are a friendly assistant for the Murmurations network directory — a searchable database of ${totalProfiles.toLocaleString()} organisations (cooperatives, community projects, Transition Towns, social enterprises) across ${totalCountries} countries. You help people find organisations by topic and location. Keep responses brief and warm. If someone greets you, say hi and tell them what you can help with. Guide them toward searching. Never use emoji. Never use markdown bold, bullet points, or lists. Talk in plain sentences. One sentence for casual chat. Don't explain what the Murmurations network is unless specifically asked. You ARE the search interface — never tell users to "visit the Murmurations website" or "search directly", they are already searching through you. Never say you "don't have access" to the data. Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset.`,
+      system: `You are CoBot, a friendly search tool for the Murmurations network — a directory of ${totalProfiles.toLocaleString()} co-ops, commons and community organisations across ${totalCountries} countries. You help people find organisations by topic and location. Keep responses brief and warm. If someone greets you, say hi and tell them what you can help with. Guide them toward searching. Never use emoji. Never use markdown bold, bullet points, or lists. Talk in plain sentences. One sentence for casual chat. Don't explain what the Murmurations network is unless specifically asked. You ARE the search interface — never tell users to "visit the Murmurations website" or "search directly", they are already searching through you. Never say you "don't have access" to the data. Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset.`,
       messages,
     });
 
@@ -653,7 +653,7 @@ app.post("/api/add-profile", async (req, res) => {
 // -------------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`\n  Murm Search running at http://localhost:${PORT}`);
+  console.log(`\n  CoBot running at http://localhost:${PORT}`);
   console.log(`  Admin panel: http://localhost:${PORT}/admin`);
   console.log(`  ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "set" : "NOT SET"}\n`);
 });
