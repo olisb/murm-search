@@ -14,7 +14,21 @@ let totalCountries = 0;
 try {
   const allProfiles = JSON.parse(fs.readFileSync(PROFILES_PATH, "utf8"));
   totalProfiles = allProfiles.length;
-  totalCountries = new Set(allProfiles.map((p) => p.country).filter(Boolean)).size;
+  // Count unique countries — split composites, deduplicate, filter noise
+  const countrySet = new Set();
+  const langDupes = new Set(["deutschland","germania","allemagne","duitsland","frankreich","francia","spanien","espana","españa","italia","italien","italië","nederland","niederlande","schweiz","suisse","svizzera","österreich","zweden","danmark","dänemark","belgien","belgique","norge","brasil","brasilien","brail","polen","kroatien","kenia","indien","bulgarien","griechenland","russland","tansania","bolivien","vereinigte staaten von amerika","verenigde staten","vereinigtes königreich","verenigd koninkrijk","perú"]);
+  for (const p of allProfiles) {
+    if (!p.country) continue;
+    const segments = p.country.replace(/&amp;/g, "&").split(/[:|]/).map(s => s.trim().toLowerCase()).filter(s => s.length > 3);
+    for (const s of segments) {
+      if (langDupes.has(s)) continue;
+      if (/[\u0400-\u04FF\u4E00-\u9FFF]/.test(s)) continue;
+      if (s.includes("(")) continue;
+      if (["borders","midlands","the north","south west","london & se","wales & borders"].includes(s)) continue;
+      countrySet.add(s);
+    }
+  }
+  totalCountries = countrySet.size;
   console.log(`  Loaded stats: ${totalProfiles} profiles, ${totalCountries} countries`);
 } catch (err) {
   console.warn("  Could not load profile stats:", err.message);
@@ -259,11 +273,9 @@ The user sees result cards and a map below your message — don't repeat what's 
 
 STRICT LIMIT: 30 words or fewer. One or two short sentences only. Plain text. No emoji. No markdown. Talk like a knowledgeable friend.
 
-Add value the cards can't: spot patterns, note gaps, suggest better searches. If results don't match, say so and suggest different terms.
+Add value the cards can't: spot patterns, note gaps, suggest better searches. If results don't match, say so and suggest different terms. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.
 
-Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.
-
-Only say something if it adds information the user can't already see.`;
+Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.`;
 }
 
 
@@ -322,7 +334,7 @@ app.post("/api/chat", async (req, res) => {
 
     const stream = client.messages.stream({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 80,
+      max_tokens: 120,
       system: systemPrompt,
       messages,
     });
@@ -379,7 +391,7 @@ Rules:
 - "is [X] in your data" or "do you have [X]" → search for X
 - "show me all [X] you know about" → search for X
 - "do you know about [X]" → search for X
-- For chat responses: be brief and warm. One sentence. You are CoBot and you help people search a directory of co-ops, commons and community organisations. Guide them toward searching. No emoji.`;
+- For chat responses: be brief and warm. One sentence. You are CoBot and you help people search a directory of co-ops, commons and community organisations. Guide them toward searching. No emoji. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.`;
 
 app.post("/api/understand", async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -535,7 +547,7 @@ app.post("/api/chat-conversational", async (req, res) => {
     const message = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 150,
-      system: `You are CoBot, a friendly search tool for the Murmurations network — a directory of ${totalProfiles.toLocaleString()} co-ops, commons and community organisations across ${totalCountries} countries. You help people find organisations by topic and location. Keep responses brief and warm. If someone greets you, say hi and tell them what you can help with. Guide them toward searching. Never use emoji. Never use markdown bold, bullet points, or lists. Talk in plain sentences. One sentence for casual chat. Don't explain what the Murmurations network is unless specifically asked. You ARE the search interface — never tell users to "visit the Murmurations website" or "search directly", they are already searching through you. Never say you "don't have access" to the data. Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset.`,
+      system: `You are CoBot, a friendly search tool for the Murmurations network — a directory of ${totalProfiles.toLocaleString()} co-ops, commons and community organisations across ${totalCountries} countries. You help people find organisations by topic and location. Keep responses brief and warm. If someone greets you, say hi and tell them what you can help with. Guide them toward searching. Never use emoji. Never use markdown bold, bullet points, or lists. Talk in plain sentences. One sentence for casual chat. Don't explain what the Murmurations network is unless specifically asked. You ARE the search interface — never tell users to "visit the Murmurations website" or "search directly", they are already searching through you. Never say you "don't have access" to the data. Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.`,
       messages,
     });
 

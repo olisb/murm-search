@@ -1,7 +1,7 @@
 const Anthropic = require("@anthropic-ai/sdk");
 
 const totalProfiles = 16885;
-const totalCountries = 314;
+const totalCountries = 129;
 
 const UNDERSTAND_PROMPT = `You are the query understanding layer for CoBot, a search tool for the Murmurations network — a directory of ${totalProfiles} co-ops, commons and community organisations across ${totalCountries} countries.
 
@@ -30,7 +30,7 @@ Rules:
 - "is [X] in your data" or "do you have [X]" → search for X
 - "show me all [X] you know about" → search for X
 - "do you know about [X]" → search for X
-- For chat responses: be brief and warm. One sentence. You are CoBot and you help people search a directory of co-ops, commons and community organisations. Guide them toward searching. No emoji.`;
+- For chat responses: be brief and warm. One sentence. You are CoBot and you help people search a directory of co-ops, commons and community organisations. Guide them toward searching. No emoji. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.`;
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {

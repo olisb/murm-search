@@ -495,7 +495,11 @@ body {
 
 .empty-state p { margin-bottom: 12px; font-size: 14px; line-height: 1.5; }
 .empty-state .examples { font-size: 13px; color: var(--text-muted); }
-.empty-state em { color: var(--text-dim); }
+/* ---- Clickable suggestion links ---- */
+.try-link { color: var(--accent); text-decoration: none; cursor: pointer; }
+.try-link:hover { text-decoration: underline; }
+.empty-state .try-link { color: var(--text-dim); }
+.empty-state .try-link:hover { color: var(--accent); }
 
 /* ---- Chat panel ---- */
 #chat-panel {

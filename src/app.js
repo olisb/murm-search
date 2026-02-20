@@ -479,11 +479,12 @@ function searchProfiles(queryEmbedding, query, topK, llmParams) {
     const semantic = cosineSimilarity(queryEmbedding, idx * EMBED_DIM);
     const kwBoost = topicKeywordBoost(profiles[idx], topicWords);
     const penalty = penalties[profiles[idx].profile_url] ?? 1;
+    const combined = semantic * geoMultiplier * (1 + kwBoost * 1.0) * penalty;
     return {
       idx,
       profile: profiles[idx],
-      score: semantic * geoMultiplier * (1 + kwBoost * 0.5) * penalty,
-      rawSemantic: semantic,
+      score: combined,
+      rawSemantic: Math.min(1, semantic * (1 + kwBoost * 1.0)),
       kwBoost,
     };
   }
@@ -560,7 +561,16 @@ function searchProfiles(queryEmbedding, query, topK, llmParams) {
     (!hasTopicWords || r.kwBoost > 0 || r.rawSemantic >= 0.5)
   );
 
-  return { results: filtered, geoNote, geoTerms, topicWords, queryType };
+  // Count total keyword-matching profiles so LLM can report accurate totals
+  let totalTopicMatches = null;
+  if (hasTopicWords) {
+    totalTopicMatches = 0;
+    for (let i = 0; i < profiles.length; i++) {
+      if (topicKeywordBoost(profiles[i], topicWords) > 0) totalTopicMatches++;
+    }
+  }
+
+  return { results: filtered, geoNote, geoTerms, topicWords, queryType, totalTopicMatches };
 }
 
 // -------------------------------------------------------------------
@@ -981,7 +991,7 @@ function addAssistantResponse(text, results) {
   const cardsHtml = buildMiniCardsHtml(results);
   const msg = addChatMessage(
     "assistant",
-    `<div class="chat-bubble">${escHtml(text)}</div>
+    `<div class="chat-bubble">${linkifySuggestions(text)}</div>
      <div class="chat-profiles">${cardsHtml}</div>`
   );
   attachMiniCardClicks(msg);
@@ -1017,6 +1027,21 @@ function addSearchOnlyResponse(results, geoNote) {
 function fireTryQuery(el) {
   const query = el.textContent;
   handleChat(query);
+}
+
+function fireTrySearch(el) {
+  const query = el.textContent;
+  const input = document.getElementById("search-input");
+  if (input) input.value = query;
+  handleSearch(query);
+}
+
+// Convert "quoted suggestions" in LLM text into clickable links
+function linkifySuggestions(text) {
+  return text.replace(/\u201c([^\u201d]+)\u201d|"([^"]+)"/g, (match, q1, q2) => {
+    const q = q1 || q2;
+    return `<a href="#" class="try-link" onclick="fireTryQuery(this); return false;">${escHtml(q)}</a>`;
+  });
 }
 
 async function handleChat(query) {
@@ -1055,7 +1080,7 @@ async function handleChat(query) {
       chatHistory.push({ role: "user", content: query });
       removeThinkingBubble();
       const response = llmResult.chatResponse || "I can help you search for organisations. What are you looking for?";
-      addChatMessage("assistant", `<div class="chat-bubble">${escHtml(response)}</div>`);
+      addChatMessage("assistant", `<div class="chat-bubble">${linkifySuggestions(response)}</div>`);
       chatHistory.push({ role: "assistant", content: response });
       chatBusy = false;
       sendBtn.disabled = false;
@@ -1073,7 +1098,7 @@ async function handleChat(query) {
     const searchResult = llmResult
       ? searchProfiles(queryEmb, searchTopic, TOP_K_DISPLAY, llmResult)
       : searchProfiles(queryEmb, query, TOP_K_DISPLAY);
-    let { results: allResults, geoNote, geoTerms, topicWords, queryType, totalGeoMatches, originalTopicWords } = searchResult;
+    let { results: allResults, geoNote, geoTerms, topicWords, queryType, totalGeoMatches, totalTopicMatches, originalTopicWords } = searchResult;
 
     // Debug: log top 5 results with scores
     console.log('[search]', { query: searchTopic, queryType, geoTerms, topicWords, totalResults: allResults.length });
@@ -1142,7 +1167,7 @@ async function handleChat(query) {
           body: JSON.stringify({
             query: query,
             profiles: llmProfiles,
-            totalResults: totalGeoMatches || allResults.length,
+            totalResults: totalGeoMatches || totalTopicMatches || allResults.length,
             geoNote: geoNote || null,
             queryType: queryType || "unknown",
             geoTerms: geoTerms || [],
@@ -1198,6 +1223,7 @@ async function handleChat(query) {
           }
 
           if (fullText) {
+            bubble.innerHTML = linkifySuggestions(fullText);
             chatHistory.push({ role: "assistant", content: fullText });
           } else {
             addSearchOnlyResponse(allResults, geoNote);

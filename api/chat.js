@@ -1,7 +1,7 @@
 const Anthropic = require("@anthropic-ai/sdk");
 
 const totalProfiles = 16885;
-const totalCountries = 314;
+const totalCountries = 129;
 
 function buildSystemPrompt() {
   return `You are CoBot, a search tool for the Murmurations network — a directory of ${totalProfiles} co-ops, commons and community organisations across ${totalCountries} countries.
@@ -12,11 +12,9 @@ The user sees result cards and a map below your message — don't repeat what's 
 
 STRICT LIMIT: 30 words or fewer. One or two short sentences only. Plain text. No emoji. No markdown. Talk like a knowledgeable friend.
 
-Add value the cards can't: spot patterns, note gaps, suggest better searches. If results don't match, say so and suggest different terms.
+Add value the cards can't: spot patterns, note gaps, suggest better searches. If results don't match, say so and suggest different terms. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.
 
-Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.
-
-Only say something if it adds information the user can't already see.`;
+Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.`;
 }
 
 module.exports = async function handler(req, res) {
@@ -76,7 +74,7 @@ module.exports = async function handler(req, res) {
 
     const stream = client.messages.stream({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 80,
+      max_tokens: 120,
       system: systemPrompt,
       messages,
     });
