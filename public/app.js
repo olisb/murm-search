@@ -276,6 +276,8 @@ async function loadData() {
   countEl.textContent = `${profiles.length.toLocaleString()} orgs`;
   const emptyCount = document.getElementById("empty-count");
   if (emptyCount) emptyCount.textContent = profiles.length.toLocaleString();
+  const welcomeCount = document.getElementById("welcome-count");
+  if (welcomeCount) welcomeCount.textContent = (Math.floor(profiles.length / 1000) * 1000).toLocaleString();
   buildLocationIndex();
   buildGeoSample();
 }
