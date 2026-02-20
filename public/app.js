@@ -878,7 +878,7 @@ function renderSearchResults(results, geoNote) {
       return `
         <div class="card${hiddenClass}${reportedClass}" data-idx="${r.idx}" data-rank="${i}" data-profile-url="${escHtml(p.profile_url || "")}">
           ${reportBtnHtml(p.profile_url, p.name, p.primary_url)}
-          <div class="card-rank">#${i + 1}</div>
+          <div class="card-rank">#${i + 1}${p.source === "openstreetmap" ? ' <span class="card-source osm">via OpenStreetMap</span>' : p.source === "kvm" ? ' <span class="card-source kvm">via KVM</span>' : ' <span class="card-source murm">via Murmurations</span>'}</div>
           <div class="card-name">${nameHtml}</div>
           ${p.primary_url ? `<div class="card-url"><a href="${escHtml(fullUrl(p.primary_url))}" target="_blank" rel="noopener">${escHtml(p.primary_url)}</a></div>` : ""}
           ${location ? `<div class="card-location">${escHtml(location)}</div>` : ""}
@@ -956,7 +956,7 @@ function buildMiniCardHtml(r, i) {
     <div class="mini-card${hiddenClass}${reportedClass}" data-idx="${r.idx}" data-profile-url="${escHtml(p.profile_url || "")}">
       <span class="mini-card-num">${i + 1}</span>
       <div class="mini-card-body">
-        <div class="mini-card-name">${nameHtml}</div>
+        <div class="mini-card-name">${nameHtml}${p.source === "openstreetmap" ? ' <span class="card-source osm">via OSM</span>' : ""}</div>
         ${p.primary_url ? `<div class="mini-card-url"><a href="${escHtml(fullUrl(p.primary_url))}" target="_blank" rel="noopener">${escHtml(p.primary_url)}</a></div>` : ""}
         ${loc ? `<div class="mini-card-loc">${escHtml(loc)}</div>` : ""}
         ${p.description ? `<div class="mini-card-desc">${escHtml(p.description)}</div>` : ""}
