@@ -1,17 +1,12 @@
 /* ============================================================
    Murm Search — Client-side app (Search + Chat modes)
+   Server-side search via /api/search
    ============================================================ */
 
-const EMBED_DIM = 384;
-const TOP_K_DISPLAY = 20;
-const TOP_K_GEO_BROWSE = 50;
-const TOP_K_LLM = 8;
 const DEBOUNCE_MS = 500;
-const GEO_FILTER_MIN = 5;
 const RELEVANCE_THRESHOLD = 0.35;
 
-let profiles = [];
-let embeddings = null;
+let mapPoints = [];
 let map = null;
 let activeCardIdx = null;
 let resultMarkers = [];
@@ -19,298 +14,31 @@ let popup = null;
 let currentMode = "chat";
 let chatAvailable = false;
 let chatBusy = false;
-let chatHistory = [];     // conversation history for LLM context
-let penalties = {};       // profile_url -> multiplier
-let reportedThisSession = new Set(); // profile_urls reported in this session
-let lastQuery = "";       // track current query for report context
-let geoSample = "";       // sample of known locations for LLM
+let chatHistory = [];
+let reportedThisSession = new Set();
+let lastQuery = "";
 
 // -------------------------------------------------------------------
-// Geographic aliases — maps query terms to profile field matchers
+// Data loading — lightweight map points + stats from server
 // -------------------------------------------------------------------
 
-const GEO_ALIASES = {
-  // UK nations
-  uk: ["england", "scotland", "wales", "northern ireland", "united kingdom", "gb"],
-  britain: ["england", "scotland", "wales", "united kingdom", "gb"],
-  "united kingdom": ["england", "scotland", "wales", "northern ireland", "united kingdom", "gb"],
-  england: ["england"],
-  scotland: ["scotland"],
-  wales: ["wales"],
-  "northern ireland": ["northern ireland"],
-  // UK regions
-  "east anglia": ["norfolk", "suffolk", "cambridgeshire", "east anglia"],
-  "west country": ["devon", "cornwall", "somerset", "dorset"],
-  "home counties": ["surrey", "kent", "essex", "hertfordshire", "buckinghamshire", "berkshire"],
-  midlands: ["west midlands", "east midlands", "warwickshire", "staffordshire", "derbyshire", "nottinghamshire", "leicestershire"],
-  "south east": ["surrey", "kent", "sussex", "hampshire"],
-  "north west": ["lancashire", "cumbria", "merseyside", "greater manchester", "cheshire"],
-  "north east": ["northumberland", "tyne and wear", "county durham"],
-  "greater london": ["london"],
-  // US
-  us: ["united states", "us", "usa"],
-  usa: ["united states", "us", "usa"],
-  "united states": ["united states", "us", "usa"],
-  america: ["united states", "us", "usa"],
-  // France
-  france: ["france", "fr", "frankreich"],
-  frankreich: ["france", "fr", "frankreich"],
-  // Germany
-  germany: ["germany", "de", "deutschland"],
-  deutschland: ["germany", "de", "deutschland"],
-  // Spain
-  spain: ["spain", "es", "españa", "espana"],
-  españa: ["spain", "es", "españa", "espana"],
-  espana: ["spain", "es", "españa", "espana"],
-  // Italy
-  italy: ["italy", "it"],
-  // Brazil
-  brazil: ["brazil", "br"],
-  // Canada
-  canada: ["canada", "ca"],
-  // Australia
-  australia: ["australia", "au"],
-  // India
-  india: ["india", "in"],
-  // Japan
-  japan: ["japan", "jp"],
-  // Netherlands
-  netherlands: ["netherlands", "nl"],
-  // Belgium
-  belgium: ["belgium", "be"],
-  // Austria
-  austria: ["austria", "at", "österreich", "oesterreich"],
-  österreich: ["austria", "at", "österreich", "oesterreich"],
-  oesterreich: ["austria", "at", "österreich", "oesterreich"],
-  // Switzerland
-  switzerland: ["switzerland", "ch", "schweiz", "suisse", "svizzera"],
-  schweiz: ["switzerland", "ch", "schweiz", "suisse", "svizzera"],
-  // Sweden
-  sweden: ["sweden", "se"],
-  // Portugal
-  portugal: ["portugal", "pt"],
-  // Kenya
-  kenya: ["kenya", "ke"],
-  // Ecuador
-  ecuador: ["ecuador", "ec"],
-  // Ireland
-  ireland: ["ireland", "ie"],
-  // New Zealand
-  "new zealand": ["new zealand", "nz"],
-};
-
-function profileMatchesGeo(profile, geoTerms) {
-  const fields = [profile.country, profile.region, profile.locality]
-    .filter(Boolean)
-    .map((s) => s.toLowerCase());
-
-  for (const term of geoTerms) {
-    for (const field of fields) {
-      if (field.includes(term)) return true;
-    }
-  }
-  return false;
-}
-
-// Split composite location strings like "England: London &amp; SE | United Kingdom"
-// into clean individual place names: ["england", "london", "se", "united kingdom"]
-function splitLocationSegments(value) {
-  return value
-    .replace(/&amp;/g, "&")
-    .split(/[:|&|]/)
-    .map((s) => s.trim().toLowerCase())
-    .filter((s) => s.length >= 2);
-}
-
-// Built once after profiles load — all unique location values from the dataset
-let knownLocations = null;
-
-function buildLocationIndex() {
-  knownLocations = new Set();
-  for (const p of profiles) {
-    if (p.locality) splitLocationSegments(p.locality).forEach((s) => knownLocations.add(s));
-    if (p.region) splitLocationSegments(p.region).forEach((s) => knownLocations.add(s));
-    if (p.country) splitLocationSegments(p.country).forEach((s) => knownLocations.add(s));
-  }
-}
-
-function extractGeoTerms(query) {
-  // Normalise: strip apostrophes, lowercase
-  const q = query.toLowerCase().replace(/['']/g, "");
-  const terms = [];
-
-  // Check aliases (longest first so "east anglia" matches before "east")
-  const aliasKeys = Object.keys(GEO_ALIASES).sort((a, b) => b.length - a.length);
-  const matched = new Set();
-  for (const key of aliasKeys) {
-    if (q.includes(key) && !matched.has(key)) {
-      terms.push(...GEO_ALIASES[key]);
-      key.split(/\s+/).forEach((w) => matched.add(w));
-      matched.add(key);
-    }
-  }
-
-  if (!knownLocations) buildLocationIndex();
-
-  // Check single words against known locations
-  const words = q.split(/\s+/).filter((w) => w.length >= 3);
-  for (const word of words) {
-    if (terms.includes(word) || matched.has(word)) continue;
-    if (knownLocations.has(word)) {
-      terms.push(word);
-    }
-  }
-
-  // Check consecutive word pairs (e.g. "tower hamlets", "new york")
-  for (let i = 0; i < words.length - 1; i++) {
-    const pair = words[i] + " " + words[i + 1];
-    if (terms.includes(pair)) continue;
-    if (knownLocations.has(pair)) {
-      terms.push(pair);
-    }
-  }
-
-  // Check consecutive triples (e.g. "city of bristol", "tyne and wear")
-  for (let i = 0; i < words.length - 2; i++) {
-    const triple = words[i] + " " + words[i + 1] + " " + words[i + 2];
-    if (terms.includes(triple)) continue;
-    if (knownLocations.has(triple)) {
-      terms.push(triple);
-    }
-  }
-
-  return terms;
-}
-
-// -------------------------------------------------------------------
-// Data loading
-// -------------------------------------------------------------------
-
-async function fetchWithProgress(url, onProgress) {
-  const res = await fetch(url);
-  const total = parseInt(res.headers.get("content-length") || "0", 10);
-  if (!res.body || !total) {
-    const buf = await res.arrayBuffer();
-    onProgress(buf.byteLength, buf.byteLength);
-    return buf;
-  }
-  const reader = res.body.getReader();
-  const chunks = [];
-  let received = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.length;
-    onProgress(received, total);
-  }
-  const result = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return result.buffer;
-}
-
-async function loadData() {
+async function loadMapPoints() {
   const countEl = document.getElementById("profile-count");
   countEl.textContent = "Loading...";
 
-  const bar = document.getElementById("loading-bar");
-  const status = document.getElementById("loading-status");
-  const progress = { meta: 0, metaTotal: 0, bin: 0, binTotal: 0 };
-
-  function updateProgress() {
-    const received = progress.meta + progress.bin;
-    const total = progress.metaTotal + progress.binTotal;
-    if (total > 0 && bar) {
-      bar.style.width = `${Math.round((received / total) * 100)}%`;
-    }
-    if (status) {
-      const mb = (received / 1048576).toFixed(1);
-      const totalMb = total > 0 ? (total / 1048576).toFixed(0) : "?";
-      status.textContent = `Loading data... ${mb} / ${totalMb} MB`;
-    }
-  }
-
-  const [metaBuf, binBuf] = await Promise.all([
-    fetchWithProgress("/data/profiles-meta.json", (received, total) => {
-      progress.meta = received;
-      progress.metaTotal = total;
-      updateProgress();
-    }),
-    fetchWithProgress("/data/embeddings.bin", (received, total) => {
-      progress.bin = received;
-      progress.binTotal = total;
-      updateProgress();
-    }),
+  const [pointsRes, statsRes] = await Promise.all([
+    fetch("/data/map-points.json"),
+    fetch("/api/stats"),
   ]);
 
-  profiles = JSON.parse(new TextDecoder().decode(metaBuf));
-  embeddings = new Float32Array(binBuf);
+  mapPoints = await pointsRes.json();
+  const stats = await statsRes.json();
 
-  // Load user-submitted profiles
-  try {
-    const upRes = await fetch("/data/user-profiles.json");
-    if (upRes.ok) {
-      const userEntries = await upRes.json();
-      for (const entry of userEntries) {
-        profiles.push(entry.profile);
-        const userEmb = new Float32Array(entry.embedding);
-        const combined = new Float32Array(embeddings.length + EMBED_DIM);
-        combined.set(embeddings);
-        combined.set(userEmb, embeddings.length);
-        embeddings = combined;
-      }
-    }
-  } catch {}
-
-  countEl.textContent = `${profiles.length.toLocaleString()} orgs`;
+  countEl.textContent = `${stats.totalProfiles.toLocaleString()} orgs`;
   const emptyCount = document.getElementById("empty-count");
-  if (emptyCount) emptyCount.textContent = profiles.length.toLocaleString();
+  if (emptyCount) emptyCount.textContent = stats.totalProfiles.toLocaleString();
   const welcomeCount = document.getElementById("welcome-count");
-  if (welcomeCount) welcomeCount.textContent = (Math.floor(profiles.length / 1000) * 1000).toLocaleString();
-  buildLocationIndex();
-  buildGeoSample();
-}
-
-function buildGeoSample() {
-  const countries = new Set();
-  const regionCounts = {};
-  const cityCounts = {};
-
-  for (const p of profiles) {
-    if (p.country) splitLocationSegments(p.country).forEach((s) => countries.add(s));
-    if (p.region) {
-      const segments = splitLocationSegments(p.region);
-      for (const s of segments) regionCounts[s] = (regionCounts[s] || 0) + 1;
-    }
-    if (p.locality) {
-      const segments = splitLocationSegments(p.locality);
-      for (const s of segments) cityCounts[s] = (cityCounts[s] || 0) + 1;
-    }
-  }
-
-  const topRegions = Object.entries(regionCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 100)
-    .map(([name]) => name);
-  const topCities = Object.entries(cityCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 100)
-    .map(([name]) => name);
-
-  geoSample = `Countries: ${[...countries].sort().join(", ")}. Regions: ${topRegions.join(", ")}. Cities: ${topCities.join(", ")}`;
-}
-
-async function loadPenalties() {
-  try {
-    const res = await fetch("/api/penalties");
-    penalties = await res.json();
-  } catch {
-    penalties = {};
-  }
+  if (welcomeCount) welcomeCount.textContent = (Math.floor(stats.totalProfiles / 1000) * 1000).toLocaleString();
 }
 
 async function checkChatAvailable() {
@@ -361,12 +89,11 @@ function initMap() {
 
 function addBackgroundLayer() {
   const features = [];
-  for (let i = 0; i < profiles.length; i++) {
-    const p = profiles[i];
-    if (p.latitude == null || p.longitude == null) continue;
+  for (let i = 0; i < mapPoints.length; i++) {
+    const p = mapPoints[i];
     features.push({
       type: "Feature",
-      geometry: { type: "Point", coordinates: [p.longitude, p.latitude] },
+      geometry: { type: "Point", coordinates: [p.lon, p.lat] },
       properties: { idx: i },
     });
   }
@@ -389,9 +116,9 @@ function addBackgroundLayer() {
 }
 
 function showProfilePopup(p, lngLat) {
-  const loc = [p.locality, p.region, p.country].filter(Boolean).join(", ");
-  const urlHtml = p.primary_url
-    ? `<a href="${escHtml(fullUrl(p.primary_url))}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px;text-decoration:none;">${escHtml(p.primary_url)}</a>`
+  const loc = p.loc || "";
+  const urlHtml = p.url
+    ? `<a href="${escHtml(fullUrl(p.url))}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px;text-decoration:none;">${escHtml(p.url)}</a>`
     : "";
 
   if (popup) popup.remove();
@@ -410,7 +137,7 @@ function setupBackgroundClicks() {
     e.preventDefault();
     if (!e.features || e.features.length === 0) return;
     const idx = e.features[0].properties.idx;
-    const p = profiles[idx];
+    const p = mapPoints[idx];
     if (!p) return;
     showProfilePopup(p, e.lngLat);
   });
@@ -424,206 +151,17 @@ function setupBackgroundClicks() {
 }
 
 // -------------------------------------------------------------------
-// Embedding + search
+// Server-side search via API
 // -------------------------------------------------------------------
 
-// Query expansion: add context prefix and expand related terms
-function expandQuery(query) {
-  let expanded = "Organisation or project related to: " + query;
-  return expanded;
-}
-
-async function embedQuery(query) {
-  const expanded = expandQuery(query);
-  const res = await fetch("/api/embed", {
+async function apiSearch(params) {
+  const res = await fetch("/api/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: expanded }),
+    body: JSON.stringify(params),
   });
-  const data = await res.json();
-  return new Float32Array(data.embedding);
-}
-
-function cosineSimilarity(a, bOffset) {
-  let dot = 0;
-  for (let i = 0; i < EMBED_DIM; i++) {
-    dot += a[i] * embeddings[bOffset + i];
-  }
-  return dot;
-}
-
-function extractTopicWords(query, geoTerms) {
-  // Extract non-geo, non-stopword terms for keyword boosting
-  const geoAliasWords = new Set();
-  for (const [key, vals] of Object.entries(GEO_ALIASES)) {
-    key.split(/\s+/).forEach((w) => geoAliasWords.add(w));
-    vals.forEach((v) => v.split(/\s+/).forEach((w) => geoAliasWords.add(w)));
-  }
-  // Also strip detected geo terms (city/region names from profile data)
-  if (geoTerms) {
-    for (const t of geoTerms) {
-      t.split(/\s+/).forEach((w) => geoAliasWords.add(w));
-    }
-  }
-  const stopwords = new Set([
-    // articles, pronouns, prepositions, conjunctions, determiners
-    "the", "and", "for", "are", "but", "not", "you", "all", "can", "has",
-    "her", "was", "one", "our", "out", "his", "how", "its", "may", "who",
-    "did", "get", "let", "say", "she", "too", "use", "with", "that", "this",
-    "from", "they", "been", "have", "many", "some", "them", "than", "each",
-    "make", "like", "into", "over", "such", "here", "what", "about",
-    "which", "when", "there", "their", "will", "would", "could", "should",
-    "any", "does", "please", "help", "want", "need", "looking",
-    "much", "got", "your", "every", "most", "these", "those",
-    "shall", "might", "just", "also", "very", "really", "quite",
-    "what's", "whats",
-    // query filler words
-    "show", "find", "search", "list", "give", "tell", "see",
-    "orgs", "org", "know", "where",
-    "everything", "anything", "things", "places", "stuff",
-    // domain terms treated as filler
-    "projects", "organisations", "organizations", "groups", "initiatives",
-    "based", "near", "nearby", "around", "related",
-  ]);
-  return query
-    .toLowerCase()
-    .replace(/['']/g, "")
-    .split(/\s+/)
-    .filter((w) => w.length >= 3 && !stopwords.has(w) && !geoAliasWords.has(w));
-}
-
-function topicKeywordBoost(profile, topicWords) {
-  if (topicWords.length === 0) return 0;
-  const text = [
-    profile.name,
-    profile.description,
-    ...(profile.tags || []),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  let matches = 0;
-  for (const word of topicWords) {
-    if (text.includes(word)) matches++;
-  }
-  // Return a boost proportional to how many topic words matched
-  return matches / topicWords.length;
-}
-
-function searchProfiles(queryEmbedding, query, topK, llmParams) {
-  let geoTerms, topicWords, queryType;
-
-  if (llmParams && llmParams.geo) {
-    geoTerms = llmParams.geo.map(g => g.toLowerCase());
-    topicWords = llmParams.topic ? extractTopicWords(llmParams.topic, []) : [];
-    queryType = llmParams.queryType || (geoTerms.length > 0 && topicWords.length > 0 ? "geo+topic" : geoTerms.length > 0 ? "geo-only" : "topic-only");
-  } else {
-    geoTerms = extractGeoTerms(query);
-    topicWords = extractTopicWords(query, geoTerms);
-    const hasTopic = topicWords.length > 0;
-    queryType = geoTerms.length > 0 && !hasTopic ? "geo-only" : geoTerms.length > 0 && hasTopic ? "geo+topic" : "topic-only";
-  }
-
-  let geoNote = null;
-  const hasTopicWords = topicWords.length > 0;
-
-  function scoreProfile(idx, geoMultiplier) {
-    const semantic = cosineSimilarity(queryEmbedding, idx * EMBED_DIM);
-    const kwBoost = topicKeywordBoost(profiles[idx], topicWords);
-    const penalty = penalties[profiles[idx].profile_url] ?? 1;
-    const combined = semantic * geoMultiplier * (1 + kwBoost * 1.0) * penalty;
-    return {
-      idx,
-      profile: profiles[idx],
-      score: combined,
-      rawSemantic: Math.min(1, semantic * (1 + kwBoost * 1.0)),
-      kwBoost,
-    };
-  }
-
-  // If we have geo terms, filter to matching profiles
-  if (geoTerms.length > 0) {
-    const geoMatchIndices = [];
-    for (let i = 0; i < profiles.length; i++) {
-      if (profileMatchesGeo(profiles[i], geoTerms)) {
-        geoMatchIndices.push(i);
-      }
-    }
-
-    if (geoMatchIndices.length >= GEO_FILTER_MIN) {
-      if (!hasTopicWords) {
-        // Geo-only: return ALL matching profiles, ranked by description length
-        const results = geoMatchIndices.map((idx) => {
-          const p = profiles[idx];
-          const descLen = (p.description || "").length;
-          return { idx, profile: p, score: descLen, rawSemantic: 0, kwBoost: 0 };
-        });
-        results.sort((a, b) => b.score - a.score);
-        const totalGeoMatches = results.length;
-        return { results: results.slice(0, TOP_K_GEO_BROWSE), geoNote, geoTerms, topicWords, queryType, totalGeoMatches };
-      }
-
-      // Geo+topic: semantic rank within geo set, require keyword overlap
-      const scored = geoMatchIndices.map((idx) => scoreProfile(idx, 1));
-      scored.sort((a, b) => b.score - a.score);
-      const topResults = scored.slice(0, topK);
-      const filtered = topResults.filter((r) =>
-        r.rawSemantic >= RELEVANCE_THRESHOLD && r.kwBoost > 0
-      );
-
-      // If topic filtering removed everything, fall back to geo-only browse
-      // so the user still sees results for that location
-      if (filtered.length === 0) {
-        const fallbackResults = geoMatchIndices.map((idx) => {
-          const p = profiles[idx];
-          const descLen = (p.description || "").length;
-          return { idx, profile: p, score: descLen, rawSemantic: 0, kwBoost: 0 };
-        });
-        fallbackResults.sort((a, b) => b.score - a.score);
-        const totalGeoMatches = fallbackResults.length;
-        return {
-          results: fallbackResults.slice(0, TOP_K_GEO_BROWSE),
-          geoNote, geoTerms, topicWords,
-          queryType: "geo+topic-fallback",
-          totalGeoMatches,
-          originalTopicWords: topicWords,
-        };
-      }
-
-      return { results: filtered, geoNote, geoTerms, topicWords, queryType };
-    }
-
-    // Geo terms present but no/few results — don't fall back to global.
-    const triedLocations = [...new Set(geoTerms)].map((t) => t.charAt(0).toUpperCase() + t.slice(1));
-    geoNote = `No results found matching that location. Searched: ${triedLocations.join(", ")}.`;
-    return { results: [], geoNote, geoTerms, topicWords, queryType };
-  }
-
-  // No geo terms — pure topic search, score all profiles
-  const allScored = [];
-  for (let i = 0; i < profiles.length; i++) {
-    allScored.push(scoreProfile(i, 1));
-  }
-  allScored.sort((a, b) => b.score - a.score);
-
-  const topResults = allScored.slice(0, topK);
-  // Drop off-topic results: no keyword overlap AND weak embedding match
-  const filtered = topResults.filter((r) =>
-    r.rawSemantic >= RELEVANCE_THRESHOLD &&
-    (!hasTopicWords || r.kwBoost > 0 || r.rawSemantic >= 0.5)
-  );
-
-  // Count total keyword-matching profiles so LLM can report accurate totals
-  let totalTopicMatches = null;
-  if (hasTopicWords) {
-    totalTopicMatches = 0;
-    for (let i = 0; i < profiles.length; i++) {
-      if (topicKeywordBoost(profiles[i], topicWords) > 0) totalTopicMatches++;
-    }
-  }
-
-  return { results: filtered, geoNote, geoTerms, topicWords, queryType, totalTopicMatches };
+  if (!res.ok) throw new Error(`Search failed: ${res.status}`);
+  return res.json();
 }
 
 // -------------------------------------------------------------------
@@ -644,8 +182,8 @@ function fullUrl(url) {
   return "https://" + url;
 }
 
-function relevanceBarHtml(score) {
-  const pct = Math.round(score * 100);
+function relevanceBarHtml(pct) {
+  const score = pct / 100;
   const color = score >= 0.5 ? "var(--accent)" : score >= RELEVANCE_THRESHOLD ? "#d4a940" : "#e87070";
   return `<div class="relevance-bar"><div class="relevance-fill" style="width:${pct}%;background:${color}"></div><span class="relevance-pct">${pct}%</span></div>`;
 }
@@ -662,7 +200,6 @@ function reportBtnHtml(profileUrl, profileName, primaryUrl) {
 }
 
 function showReportModal(profileUrl, profileName, primaryUrl) {
-  // Remove existing modal
   const existing = document.getElementById("report-modal");
   if (existing) existing.remove();
 
@@ -684,31 +221,26 @@ function showReportModal(profileUrl, profileName, primaryUrl) {
   `;
   document.body.appendChild(modal);
 
-  // Close on overlay click
   modal.addEventListener("click", (e) => {
     if (e.target === modal) modal.remove();
   });
 
   modal.querySelector(".report-cancel").addEventListener("click", () => modal.remove());
 
-  // Quick report options
   modal.querySelectorAll(".report-option").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const type = btn.dataset.type;
-
       if (type === "feedback_expand") {
         modal.querySelector(".report-feedback-wrap").classList.remove("hidden");
         modal.querySelector(".report-feedback-input").focus();
         return;
       }
-
       await submitReport(profileUrl, profileName, primaryUrl, type, null);
       markReported(profileUrl);
       modal.remove();
     });
   });
 
-  // Feedback send
   modal.querySelector(".report-feedback-send").addEventListener("click", async () => {
     const input = modal.querySelector(".report-feedback-input");
     const message = input.value.trim();
@@ -739,8 +271,6 @@ async function submitReport(profileUrl, profileName, primaryUrl, reportType, mes
         message,
       }),
     });
-    // Reload penalties
-    await loadPenalties();
   } catch (err) {
     console.error("Report failed:", err);
   }
@@ -748,7 +278,6 @@ async function submitReport(profileUrl, profileName, primaryUrl, reportType, mes
 
 function markReported(profileUrl) {
   reportedThisSession.add(profileUrl);
-  // Dim all cards for this profile
   document.querySelectorAll(`[data-profile-url="${CSS.escape(profileUrl)}"]`).forEach((card) => {
     card.classList.add("reported");
   });
@@ -776,10 +305,9 @@ function clearMarkers() {
 
 function plotResults(results) {
   clearMarkers();
-  const coords = []; // collect coords for outlier-aware bounds
+  const coords = [];
 
-  results.forEach((r, i) => {
-    const p = r.profile;
+  results.forEach((p, i) => {
     if (p.latitude == null || p.longitude == null) return;
 
     const el = document.createElement("div");
@@ -796,13 +324,12 @@ function plotResults(results) {
       transition: transform 0.15s;
     `;
     el.textContent = i + 1;
-    el.dataset.idx = r.idx;
 
     const marker = new maplibregl.Marker({ element: el })
       .setLngLat([p.longitude, p.latitude])
       .addTo(map);
 
-    el.addEventListener("click", () => highlightMarker(r.idx));
+    el.addEventListener("click", () => highlightResult(i, p));
 
     resultMarkers.push(marker);
     coords.push([p.longitude, p.latitude]);
@@ -810,8 +337,6 @@ function plotResults(results) {
 
   if (coords.length === 0) return;
 
-  // Compute bounds excluding geographic outliers (using IQR method)
-  // This prevents a single distant marker from zooming the map out
   const boundsCoords = excludeGeoOutliers(coords);
   const bounds = new maplibregl.LngLatBounds();
   for (const [lng, lat] of boundsCoords) {
@@ -833,7 +358,6 @@ function excludeGeoOutliers(coords) {
   const q3Lng = lngs[Math.floor(lngs.length * 0.75)];
   const iqrLng = q3Lng - q1Lng;
 
-  // Use generous bounds (3x IQR) to only exclude clear outliers
   const margin = 3;
   const latMin = q1Lat - margin * Math.max(iqrLat, 0.5);
   const latMax = q3Lat + margin * Math.max(iqrLat, 0.5);
@@ -844,26 +368,38 @@ function excludeGeoOutliers(coords) {
     ([lng, lat]) => lat >= latMin && lat <= latMax && lng >= lngMin && lng <= lngMax
   );
 
-  // If everything got filtered (shouldn't happen), fall back to all coords
   return filtered.length > 0 ? filtered : coords;
 }
 
-function highlightMarker(idx) {
-  // Highlight the corresponding card/mini-card
+function highlightResult(rank, profile) {
   document.querySelectorAll(".card, .mini-card").forEach((c) => c.classList.remove("active"));
-  const card = document.querySelector(`[data-idx="${idx}"]`);
+  const card = document.querySelector(`[data-rank="${rank}"]`);
   if (card) {
     card.classList.add("active");
     card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
-  // Show popup for the clicked profile
-  const p = profiles[idx];
-  if (p) {
-    showProfilePopup(p, [p.longitude, p.latitude]);
+  if (profile && profile.latitude != null && profile.longitude != null) {
+    const loc = [profile.locality, profile.region, profile.country].filter(Boolean).join(", ");
+    showResultPopup(profile, [profile.longitude, profile.latitude]);
   }
+}
 
-  activeCardIdx = idx;
+function showResultPopup(p, lngLat) {
+  const loc = [p.locality, p.region, p.country].filter(Boolean).join(", ");
+  const urlHtml = p.primary_url
+    ? `<a href="${escHtml(fullUrl(p.primary_url))}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px;text-decoration:none;">${escHtml(p.primary_url)}</a>`
+    : "";
+
+  if (popup) popup.remove();
+  popup = new maplibregl.Popup({ offset: 8, closeButton: true, closeOnClick: false })
+    .setLngLat(lngLat)
+    .setHTML(`
+      <div class="popup-name">${escHtml(p.name)}</div>
+      ${loc ? `<div class="popup-loc">${escHtml(loc)}</div>` : ""}
+      ${urlHtml ? `<div style="margin-top:4px">${urlHtml}</div>` : ""}
+    `)
+    .addTo(map);
 }
 
 // -------------------------------------------------------------------
@@ -883,8 +419,7 @@ function renderSearchResults(results, geoNote) {
 
   empty.style.display = "none";
   container.innerHTML = results
-    .map((r, i) => {
-      const p = r.profile;
+    .map((p, i) => {
       const locParts = [p.locality, p.region, p.country].filter(Boolean);
       const location = locParts.join(", ");
       const nameHtml = p.primary_url
@@ -898,7 +433,7 @@ function renderSearchResults(results, geoNote) {
       const hiddenClass = i >= CARDS_COLLAPSED ? " card-overflow" : "";
       const reportedClass = reportedThisSession.has(p.profile_url) ? " reported" : "";
       return `
-        <div class="card${hiddenClass}${reportedClass}" data-idx="${r.idx}" data-rank="${i}" data-profile-url="${escHtml(p.profile_url || "")}">
+        <div class="card${hiddenClass}${reportedClass}" data-rank="${i}" data-profile-url="${escHtml(p.profile_url || "")}">
           ${reportBtnHtml(p.profile_url, p.name, p.primary_url)}
           <div class="card-rank">#${i + 1}${p.source === "openstreetmap" ? ' <span class="card-source osm">via OpenStreetMap</span>' : p.source === "kvm" ? ' <span class="card-source kvm">via KVM</span>' : ' <span class="card-source murm">via Murmurations</span>'}</div>
           <div class="card-name">${nameHtml}</div>
@@ -906,7 +441,7 @@ function renderSearchResults(results, geoNote) {
           ${location ? `<div class="card-location">${escHtml(location)}</div>` : ""}
           ${p.description ? `<div class="card-desc">${escHtml(p.description)}</div>` : ""}
           ${tags ? `<div class="card-tags">${tags}</div>` : ""}
-          ${r.rawSemantic > 0 ? relevanceBarHtml(r.rawSemantic) : ""}
+          ${p._relevance > 0 ? relevanceBarHtml(p._relevance) : ""}
         </div>`;
     })
     .join("");
@@ -919,10 +454,10 @@ function renderSearchResults(results, geoNote) {
   }
 
   attachReportButtons(container);
-  container.querySelectorAll(".card").forEach((card) => {
+  container.querySelectorAll(".card").forEach((card, i) => {
     card.addEventListener("click", (e) => {
       if (e.target.tagName === "A" || e.target.closest(".report-btn")) return;
-      highlightMarker(parseInt(card.dataset.idx));
+      highlightResult(parseInt(card.dataset.rank), results[parseInt(card.dataset.rank)]);
     });
   });
 }
@@ -940,14 +475,10 @@ async function handleSearch(query) {
   lastQuery = query.trim();
   document.body.classList.add("loading");
   try {
-    const queryEmb = await embedQuery(query);
-    const { results, geoNote, queryType, topicWords } = searchProfiles(queryEmb, query, TOP_K_DISPLAY);
-    console.log('[search]', { query, queryType, topicWords, totalResults: results.length });
-    results.slice(0, 5).forEach((r, i) => {
-      console.log(`  #${i+1} "${r.profile.name}" semantic=${r.rawSemantic.toFixed(3)} kwBoost=${r.kwBoost.toFixed(3)} score=${r.score.toFixed(3)}`);
-    });
-    renderSearchResults(results, geoNote);
-    plotResults(results);
+    const data = await apiSearch({ query: query.trim() });
+    console.log('[search]', { query, queryType: data.queryType, totalResults: data.results.length });
+    renderSearchResults(data.results, data.geoNote);
+    plotResults(data.results);
   } catch (err) {
     console.error("Search error:", err);
   } finally {
@@ -961,8 +492,7 @@ async function handleSearch(query) {
 
 const CARDS_COLLAPSED = 5;
 
-function buildMiniCardHtml(r, i) {
-  const p = r.profile;
+function buildMiniCardHtml(p, i) {
   const loc = [p.locality, p.region, p.country].filter(Boolean).join(", ");
   const nameHtml = p.primary_url
     ? `<a href="${escHtml(fullUrl(p.primary_url))}" target="_blank" rel="noopener">${escHtml(p.name)}</a>`
@@ -975,7 +505,7 @@ function buildMiniCardHtml(r, i) {
   const hiddenClass = i >= CARDS_COLLAPSED ? " mini-card-overflow" : "";
   const reportedClass = reportedThisSession.has(p.profile_url) ? " reported" : "";
   return `
-    <div class="mini-card${hiddenClass}${reportedClass}" data-idx="${r.idx}" data-profile-url="${escHtml(p.profile_url || "")}">
+    <div class="mini-card${hiddenClass}${reportedClass}" data-rank="${i}" data-profile-url="${escHtml(p.profile_url || "")}">
       <span class="mini-card-num">${i + 1}</span>
       <div class="mini-card-body">
         <div class="mini-card-name">${nameHtml}${p.source === "openstreetmap" ? ' <span class="card-source osm">via OSM</span>' : ""}</div>
@@ -983,14 +513,14 @@ function buildMiniCardHtml(r, i) {
         ${loc ? `<div class="mini-card-loc">${escHtml(loc)}</div>` : ""}
         ${p.description ? `<div class="mini-card-desc">${escHtml(p.description)}</div>` : ""}
         ${tags ? `<div class="mini-card-tags">${tags}</div>` : ""}
-        ${r.rawSemantic > 0 ? relevanceBarHtml(r.rawSemantic) : ""}
+        ${p._relevance > 0 ? relevanceBarHtml(p._relevance) : ""}
       </div>
       ${reportBtnHtml(p.profile_url, p.name, p.primary_url)}
     </div>`;
 }
 
 function buildMiniCardsHtml(results) {
-  let html = results.map((r, i) => buildMiniCardHtml(r, i)).join("");
+  let html = results.map((p, i) => buildMiniCardHtml(p, i)).join("");
   if (results.length > CARDS_COLLAPSED) {
     const extra = results.length - CARDS_COLLAPSED;
     html += `<button class="show-more-btn" onclick="this.parentElement.classList.add('expanded'); this.remove();">Show ${extra} more</button>`;
@@ -1030,12 +560,13 @@ function removeThinkingBubble() {
   if (el) el.remove();
 }
 
-function attachMiniCardClicks(container) {
+function attachMiniCardClicks(container, results) {
   attachReportButtons(container);
   container.querySelectorAll(".mini-card").forEach((card) => {
     card.addEventListener("click", (e) => {
       if (e.target.tagName === "A" || e.target.closest(".report-btn")) return;
-      highlightMarker(parseInt(card.dataset.idx));
+      const rank = parseInt(card.dataset.rank);
+      highlightResult(rank, results[rank]);
     });
   });
 }
@@ -1047,7 +578,7 @@ function addAssistantResponse(text, results) {
     `<div class="chat-bubble">${linkifySuggestions(text)}</div>
      <div class="chat-profiles">${cardsHtml}</div>`
   );
-  attachMiniCardClicks(msg);
+  attachMiniCardClicks(msg, results);
 }
 
 function addAssistantError(text) {
@@ -1074,7 +605,7 @@ function addSearchOnlyResponse(results, geoNote) {
     `${noteHtml}
      <div class="chat-profiles">${cardsHtml}</div>`
   );
-  attachMiniCardClicks(msg);
+  attachMiniCardClicks(msg, results);
 }
 
 function fireTryQuery(el) {
@@ -1111,7 +642,7 @@ async function handleChat(query) {
   addThinkingBubble();
 
   try {
-    // Step 1: Understand the query (single LLM call for classification + rewriting + geo/topic extraction)
+    // Step 1: Understand the query
     let llmResult = null;
 
     if (chatAvailable) {
@@ -1119,7 +650,7 @@ async function handleChat(query) {
         const uRes = await fetch("/api/understand", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: query, history: chatHistory.slice(-6), sampleLocations: geoSample }),
+          body: JSON.stringify({ message: query, history: chatHistory.slice(-6) }),
         });
         llmResult = await uRes.json();
         console.log('[understand]', llmResult);
@@ -1128,7 +659,7 @@ async function handleChat(query) {
       }
     }
 
-    // Step 2: If chat, show response directly (no search needed)
+    // Step 2: If chat, show response directly
     if (llmResult?.action === "chat") {
       chatHistory.push({ role: "user", content: query });
       removeThinkingBubble();
@@ -1141,23 +672,18 @@ async function handleChat(query) {
       return;
     }
 
-    // Step 3: Run search pipeline
-    const searchTopic = llmResult?.topic || query;
-    let queryEmb = null;
-    if (!llmResult || llmResult.queryType !== "geo-only") {
-      queryEmb = await embedQuery(searchTopic);
-    }
+    // Step 3: Run search via API
+    const searchParams = llmResult
+      ? { query, geo: llmResult.geo, topic: llmResult.topic, queryType: llmResult.queryType, showAll: llmResult.showAll }
+      : { query };
 
-    const searchResult = llmResult
-      ? searchProfiles(queryEmb, searchTopic, TOP_K_DISPLAY, llmResult)
-      : searchProfiles(queryEmb, query, TOP_K_DISPLAY);
-    let { results: allResults, geoNote, geoTerms, topicWords, queryType, totalGeoMatches, totalTopicMatches, originalTopicWords } = searchResult;
+    const searchData = await apiSearch(searchParams);
+    const allResults = searchData.results;
+    const geoNote = searchData.geoNote;
+    const queryType = searchData.queryType;
+    const totalResults = searchData.totalResults;
 
-    // Debug: log top 5 results with scores
-    console.log('[search]', { query: searchTopic, queryType, geoTerms, topicWords, totalResults: allResults.length });
-    allResults.slice(0, 5).forEach((r, i) => {
-      console.log(`  #${i+1} "${r.profile.name}" semantic=${r.rawSemantic.toFixed(3)} kwBoost=${r.kwBoost.toFixed(3)} score=${r.score.toFixed(3)}`);
-    });
+    console.log('[search]', { query, queryType, totalResults: allResults.length });
 
     // Show results on map
     plotResults(allResults);
@@ -1175,24 +701,10 @@ async function handleChat(query) {
       return;
     }
 
-    // Geo+topic fallback: topic search found nothing, but geo location has results.
-    // Send to LLM with context about the failed topic filter.
-    if (queryType === "geo+topic-fallback") {
-      const topicStr = (originalTopicWords || topicWords || []).join(", ");
-      const count = totalGeoMatches || allResults.length;
-      // Find any loosely related profiles to mention to the LLM
-      const topicRelated = allResults.filter((r) => {
-        const text = [r.profile.name, r.profile.description, ...(r.profile.tags || [])].filter(Boolean).join(" ").toLowerCase();
-        return (originalTopicWords || topicWords || []).some((w) => text.includes(w));
-      }).slice(0, 5);
-      const relatedNames = topicRelated.map((r) => r.profile.name);
-      geoNote = `No results specifically matching "${topicStr}" were found. Showing all ${count} organisations in that location instead.${relatedNames.length > 0 ? ` Possibly related: ${relatedNames.join(", ")}.` : ""}`;
-    }
-
     // Geo-only browse: skip LLM, just show count
     if (queryType === "geo-only") {
       removeThinkingBubble();
-      const count = totalGeoMatches || allResults.length;
+      const count = totalResults || allResults.length;
       const showing = allResults.length < count ? ` Showing top ${allResults.length}.` : "";
       addAssistantResponse(`${count} organisations found.${showing}`, allResults);
       chatHistory.push({ role: "user", content: query });
@@ -1203,12 +715,6 @@ async function handleChat(query) {
       return;
     }
 
-    // Send top 8 to LLM with scores for conversational response
-    const llmProfiles = allResults.slice(0, TOP_K_LLM).map((r) => ({
-      ...r.profile,
-      _relevance: r.rawSemantic > 0 ? Math.round(r.rawSemantic * 100) : null,
-    }));
-
     // Track user message in history
     chatHistory.push({ role: "user", content: query });
 
@@ -1218,13 +724,12 @@ async function handleChat(query) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            query: query,
-            profiles: llmProfiles,
-            totalResults: totalGeoMatches || totalTopicMatches || allResults.length,
-            geoNote: geoNote || null,
+            query,
+            geo: llmResult?.geo || [],
+            topic: llmResult?.topic || "",
             queryType: queryType || "unknown",
-            geoTerms: geoTerms || [],
-            topicKeywords: topicWords || [],
+            showAll: llmResult?.showAll || false,
+            geoNote: geoNote || null,
             history: chatHistory.slice(-10),
           }),
         });
@@ -1242,7 +747,7 @@ async function handleChat(query) {
           const msg = addChatMessage("assistant",
             `<div class="chat-bubble"></div>
              <div class="chat-profiles">${cardsHtml}</div>`);
-          attachMiniCardClicks(msg);
+          attachMiniCardClicks(msg, allResults);
           const bubble = msg.querySelector(".chat-bubble");
           let fullText = "";
 
@@ -1336,7 +841,7 @@ function setMode(mode) {
 
 async function init() {
   initMap();
-  await Promise.all([loadData(), checkChatAvailable(), loadPenalties()]);
+  await Promise.all([loadMapPoints(), checkChatAvailable()]);
 
   document.querySelectorAll(".mode-btn").forEach((btn) => {
     btn.addEventListener("click", () => setMode(btn.dataset.mode));
@@ -1350,13 +855,6 @@ async function init() {
 
   const welcome = document.querySelector(".chat-welcome");
   if (welcome) welcome.style.visibility = "visible";
-
-  // Fade out loading overlay
-  const overlay = document.getElementById("loading-overlay");
-  if (overlay) {
-    overlay.classList.add("fade-out");
-    setTimeout(() => overlay.remove(), 400);
-  }
 
   // Search mode input
   const searchInput = document.getElementById("search-input");

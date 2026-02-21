@@ -1,6 +1,13 @@
 const Anthropic = require("@anthropic-ai/sdk");
 const { getStats } = require("./_stats");
 
+// Lazy-import the search module for internal search
+let searchModule = null;
+function getSearchModule() {
+  if (!searchModule) searchModule = require("./search");
+  return searchModule;
+}
+
 function buildSystemPrompt() {
   const { totalProfiles, totalCountries } = getStats();
   return `You are CoBot, a search tool that combines data from the Murmurations network and OpenStreetMap to provide a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops across ${totalCountries} countries.
@@ -27,16 +34,32 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { query, profiles: profileList = [], totalResults, geoNote,
-            queryType, geoTerms, topicKeywords, history = [] } = req.body;
+    const { query, geo, topic, queryType: reqQueryType, showAll, geoNote: reqGeoNote, history = [] } = req.body;
     if (!query || typeof query !== "string") {
       return res.status(400).json({ error: "Missing query" });
     }
 
-    const total = totalResults != null ? totalResults : profileList.length;
+    // Run search internally via a mock req/res to reuse the search endpoint
+    const searchResults = await new Promise((resolve, reject) => {
+      const mockReq = {
+        method: "POST",
+        body: { query, geo, topic, queryType: reqQueryType, showAll },
+      };
+      const mockRes = {
+        status: (code) => ({ json: (data) => reject(new Error(data.error || "Search failed")) }),
+        json: (data) => resolve(data),
+      };
+      getSearchModule()(mockReq, mockRes).catch(reject);
+    });
 
-    const geoStr = geoTerms && geoTerms.length > 0 ? geoTerms.join(", ") : "none";
-    const topicStr = topicKeywords && topicKeywords.length > 0 ? topicKeywords.join(", ") : "none";
+    const profileList = searchResults.results.slice(0, 8);
+    const total = searchResults.totalResults || profileList.length;
+    const geoNote = reqGeoNote || searchResults.geoNote;
+    const geoTerms = searchResults.geoTerms || [];
+    const topicKeywords = searchResults.topicWords || [];
+
+    const geoStr = geoTerms.length > 0 ? geoTerms.join(", ") : "none";
+    const topicStr = topicKeywords.length > 0 ? topicKeywords.join(", ") : "none";
 
     const profileContext = profileList
       .slice(0, 8)
@@ -52,7 +75,7 @@ module.exports = async function handler(req, res) {
 
     const metadata = `Search metadata:
 - Total matches: ${total} (showing top ${profileList.length})
-- Query type: ${queryType || "unknown"}
+- Query type: ${searchResults.queryType || reqQueryType || "unknown"}
 - Location filter: ${geoStr}
 - Topic filter: ${topicStr}${geoNote ? `\n- Note: ${geoNote}` : ""}`;
 
