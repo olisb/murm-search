@@ -3,7 +3,7 @@ const { getStats } = require("./_stats");
 
 function getUnderstandPrompt() {
   const { totalProfiles, totalCountries } = getStats();
-  return `You are the query understanding layer for CoBot, a search tool combining Murmurations and OpenStreetMap data — a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade and charity shops across ${totalCountries} countries.
+  return `You are the query understanding layer for CoBot, a search tool combining Murmurations and OpenStreetMap data — a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops across ${totalCountries} countries.
 
 Given the user's message and conversation history, determine what they want and return ONLY a JSON object.
 
@@ -30,7 +30,7 @@ Rules:
 - "is [X] in your data" or "do you have [X]" → search for X
 - "show me all [X] you know about" → search for X
 - "do you know about [X]" → search for X
-- For chat responses: be brief and warm. One sentence. You are CoBot and you help people search a directory of co-ops, commons, community organisations, coworking spaces, repair cafes, zero waste, fair trade and charity shops. Guide them toward searching. No emoji. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.`;
+- For chat responses: be brief and warm. One sentence. You are CoBot and you help people search a directory of co-ops, commons, community organisations, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops. Guide them toward searching. No emoji. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.`;
 }
 
 module.exports = async function handler(req, res) {
