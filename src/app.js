@@ -80,11 +80,6 @@ function initMap() {
   });
 
   map.addControl(new maplibregl.NavigationControl(), "top-right");
-
-  map.on("load", () => {
-    addBackgroundLayer();
-    setupBackgroundClicks();
-  });
 }
 
 function addBackgroundLayer() {
@@ -841,7 +836,11 @@ function setMode(mode) {
 
 async function init() {
   initMap();
-  await Promise.all([loadMapPoints(), checkChatAvailable()]);
+  const mapReady = new Promise(resolve => map.on("load", resolve));
+  await Promise.all([loadMapPoints(), checkChatAvailable(), mapReady]);
+
+  addBackgroundLayer();
+  setupBackgroundClicks();
 
   document.querySelectorAll(".mode-btn").forEach((btn) => {
     btn.addEventListener("click", () => setMode(btn.dataset.mode));
