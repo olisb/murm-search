@@ -81,6 +81,14 @@ const CATEGORIES = [
     defaultTags: ["fair trade"],
     outputFile: "osm-fair_trade.json",
   },
+  {
+    name: "ngos",
+    tags: [
+      { key: "office", value: "ngo" },
+    ],
+    defaultTags: ["ngo", "nonprofit"],
+    outputFile: "osm-ngos.json",
+  },
 ];
 
 const COUNTRY_NAMES = {
