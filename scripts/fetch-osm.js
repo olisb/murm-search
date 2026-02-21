@@ -112,6 +112,14 @@ const CATEGORIES = [
     defaultTags: ["farm shop", "farm"],
     outputFile: "osm-farm_shops.json",
   },
+  {
+    name: "nature_reserves",
+    tags: [
+      { key: "leisure", value: "nature_reserve" },
+    ],
+    defaultTags: ["nature reserve", "conservation"],
+    outputFile: "osm-nature_reserves.json",
+  },
 ];
 
 const COUNTRY_NAMES = {

@@ -604,7 +604,7 @@ app.post("/api/embed", async (req, res) => {
 // Chat endpoint
 // -------------------------------------------------------------------
 function buildSystemPrompt() {
-  return `You are CoBot, a search tool that combines data from the Murmurations network and OpenStreetMap to provide a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops across ${totalCountries} countries.
+  return `You are CoBot, a search tool that combines data from the Murmurations network and OpenStreetMap to provide a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops, nature reserves and NGOs across ${totalCountries} countries.
 
 The user searches by talking to you. Their messages trigger searches automatically and you see the results below. You ARE the search tool — never tell users to "visit the Murmurations website" or "search directly." Never say you "don't have access" to data.
 
@@ -724,7 +724,7 @@ app.post("/api/chat", async (req, res) => {
 // -------------------------------------------------------------------
 // Query understanding (single LLM call replaces classifier + rewriter)
 // -------------------------------------------------------------------
-const UNDERSTAND_PROMPT = `You are the query understanding layer for CoBot, a search tool combining Murmurations and OpenStreetMap data — a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops across ${totalCountries} countries.
+const UNDERSTAND_PROMPT = `You are the query understanding layer for CoBot, a search tool combining Murmurations and OpenStreetMap data — a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops, nature reserves and NGOs across ${totalCountries} countries.
 
 Given the user's message and conversation history, determine what they want and return ONLY a JSON object.
 
@@ -751,7 +751,7 @@ Rules:
 - "is [X] in your data" or "do you have [X]" → search for X
 - "show me all [X] you know about" → search for X
 - "do you know about [X]" → search for X
-- For chat responses: be brief and warm. One sentence. You are CoBot and you help people search a directory of co-ops, commons, community organisations, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops. Guide them toward searching. No emoji. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.`;
+- For chat responses: be brief and warm. One sentence. You are CoBot and you help people search a directory of co-ops, commons, community organisations, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops, nature reserves and NGOs. Guide them toward searching. No emoji. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.`;
 
 app.post("/api/understand", async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
