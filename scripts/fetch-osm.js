@@ -89,6 +89,21 @@ const CATEGORIES = [
     defaultTags: ["ngo", "nonprofit"],
     outputFile: "osm-ngos.json",
   },
+  {
+    name: "charity_shops",
+    tags: [
+      { key: "shop", value: "charity" },
+      { key: "shop", value: "second_hand" },
+      { key: "amenity", value: "freeshop" },
+    ],
+    defaultTags: ["charity shop", "second hand"],
+    outputFile: "osm-charity_shops.json",
+    tagLabel: (tags) => {
+      if (tags.amenity === "freeshop") return "free shop";
+      if (tags.shop === "charity") return "charity shop";
+      return "second hand shop";
+    },
+  },
 ];
 
 const COUNTRY_NAMES = {
