@@ -212,18 +212,69 @@ function extractGeoTerms(query) {
 // Data loading
 // -------------------------------------------------------------------
 
+async function fetchWithProgress(url, onProgress) {
+  const res = await fetch(url);
+  const total = parseInt(res.headers.get("content-length") || "0", 10);
+  if (!res.body || !total) {
+    const buf = await res.arrayBuffer();
+    onProgress(buf.byteLength, buf.byteLength);
+    return buf;
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    onProgress(received, total);
+  }
+  const result = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result.buffer;
+}
+
 async function loadData() {
   const countEl = document.getElementById("profile-count");
   countEl.textContent = "Loading...";
 
-  const [metaRes, binRes] = await Promise.all([
-    fetch("/data/profiles-meta.json"),
-    fetch("/data/embeddings.bin"),
+  const bar = document.getElementById("loading-bar");
+  const status = document.getElementById("loading-status");
+  const progress = { meta: 0, metaTotal: 0, bin: 0, binTotal: 0 };
+
+  function updateProgress() {
+    const received = progress.meta + progress.bin;
+    const total = progress.metaTotal + progress.binTotal;
+    if (total > 0 && bar) {
+      bar.style.width = `${Math.round((received / total) * 100)}%`;
+    }
+    if (status) {
+      const mb = (received / 1048576).toFixed(1);
+      const totalMb = total > 0 ? (total / 1048576).toFixed(0) : "?";
+      status.textContent = `Loading data... ${mb} / ${totalMb} MB`;
+    }
+  }
+
+  const [metaBuf, binBuf] = await Promise.all([
+    fetchWithProgress("/data/profiles-meta.json", (received, total) => {
+      progress.meta = received;
+      progress.metaTotal = total;
+      updateProgress();
+    }),
+    fetchWithProgress("/data/embeddings.bin", (received, total) => {
+      progress.bin = received;
+      progress.binTotal = total;
+      updateProgress();
+    }),
   ]);
 
-  profiles = await metaRes.json();
-  const buf = await binRes.arrayBuffer();
-  embeddings = new Float32Array(buf);
+  profiles = JSON.parse(new TextDecoder().decode(metaBuf));
+  embeddings = new Float32Array(binBuf);
 
   // Load user-submitted profiles from server file
   try {
@@ -1338,6 +1389,13 @@ async function init() {
 
   const welcome = document.querySelector(".chat-welcome");
   if (welcome) welcome.style.visibility = "visible";
+
+  // Fade out loading overlay
+  const overlay = document.getElementById("loading-overlay");
+  if (overlay) {
+    overlay.classList.add("fade-out");
+    setTimeout(() => overlay.remove(), 400);
+  }
 
   // Search mode input
   const searchInput = document.getElementById("search-input");

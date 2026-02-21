@@ -1018,6 +1018,55 @@ body {
 /* ---- Utility ---- */
 .hidden { display: none !important; }
 
+/* ---- Loading overlay ---- */
+#loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.4s ease;
+}
+#loading-overlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+.loading-content {
+  text-align: center;
+  max-width: 400px;
+  padding: 0 24px;
+}
+.loading-content h1 {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+.loading-content > p {
+  color: var(--text-dim);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+.loading-bar-track {
+  width: 200px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 0 auto 12px;
+  overflow: hidden;
+}
+.loading-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.loading-status {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 768px) {
   :root { --sidebar-width: 100%; }
