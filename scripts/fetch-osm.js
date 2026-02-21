@@ -104,6 +104,14 @@ const CATEGORIES = [
       return "second hand shop";
     },
   },
+  {
+    name: "farm_shops",
+    tags: [
+      { key: "shop", value: "farm" },
+    ],
+    defaultTags: ["farm shop", "farm"],
+    outputFile: "osm-farm_shops.json",
+  },
 ];
 
 const COUNTRY_NAMES = {
