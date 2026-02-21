@@ -11,6 +11,7 @@ app.use(express.json({ limit: "2mb" }));
 const PROFILES_PATH = path.join(__dirname, "..", "data", "profiles.json");
 let totalProfiles = 0;
 let totalCountries = 0;
+let categoryCounts = "";
 try {
   const allProfiles = JSON.parse(fs.readFileSync(PROFILES_PATH, "utf8"));
   totalProfiles = allProfiles.length;
@@ -29,6 +30,34 @@ try {
     }
   }
   totalCountries = countrySet.size;
+  // Count profiles by category using tags
+  const tagCounts = {};
+  const TAG_CATEGORIES = {
+    "nature reserve": "nature reserves",
+    "farm shop": "farm shops",
+    "ngo": "NGOs",
+    "charity shop": "charity shops",
+    "second hand shop": "second hand shops",
+    "free shop": "free shops",
+    "organic shop": "organic shops",
+    "organic": "organic shops",
+    "coworking": "coworking spaces",
+    "hackerspace": "hackerspaces",
+    "makerspace": "makerspaces",
+    "cooperative": "cooperatives",
+    "coop": "cooperatives",
+    "repair cafe": "repair cafes",
+    "zero waste": "zero waste shops",
+    "fair trade": "fair trade shops",
+  };
+  for (const p of allProfiles) {
+    for (const t of (p.tags || [])) {
+      const cat = TAG_CATEGORIES[t];
+      if (cat && !tagCounts[cat]) tagCounts[cat] = 0;
+      if (cat) tagCounts[cat]++;
+    }
+  }
+  categoryCounts = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${v} ${k}`).join(", ");
   console.log(`  Loaded stats: ${totalProfiles} profiles, ${totalCountries} countries`);
 } catch (err) {
   console.warn("  Could not load profile stats:", err.message);
@@ -604,9 +633,9 @@ app.post("/api/embed", async (req, res) => {
 // Chat endpoint
 // -------------------------------------------------------------------
 function buildSystemPrompt() {
-  return `You are CoBot, a search tool that combines data from the Murmurations network and OpenStreetMap to provide a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops, nature reserves and NGOs across ${totalCountries} countries.
+  return `You are CoBot, a search tool that combines data from the Murmurations network and OpenStreetMap to provide a directory of ${totalProfiles} profiles across ${totalCountries} countries. The directory includes: ${categoryCounts}, plus co-ops, commons, community organisations and more from the Murmurations network.
 
-The user searches by talking to you. Their messages trigger searches automatically and you see the results below. You ARE the search tool — never tell users to "visit the Murmurations website" or "search directly." Never say you "don't have access" to data.
+The user searches by talking to you. Their messages trigger searches automatically and you see the results below. You ARE the search tool — never tell users to "visit the Murmurations website" or "search directly." Never say you "don't have access" to data. NEVER refer users to Google, Google Maps, or any external search engine. If you can't find what they want, suggest a related search using terms you do have data for.
 
 The user sees result cards and a map below your message — don't repeat what's visible there.
 
@@ -724,7 +753,7 @@ app.post("/api/chat", async (req, res) => {
 // -------------------------------------------------------------------
 // Query understanding (single LLM call replaces classifier + rewriter)
 // -------------------------------------------------------------------
-const UNDERSTAND_PROMPT = `You are the query understanding layer for CoBot, a search tool combining Murmurations and OpenStreetMap data — a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops, nature reserves and NGOs across ${totalCountries} countries.
+const UNDERSTAND_PROMPT = `You are the query understanding layer for CoBot, a search tool combining Murmurations and OpenStreetMap data — a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops, organic shops, nature reserves and NGOs across ${totalCountries} countries.
 
 Given the user's message and conversation history, determine what they want and return ONLY a JSON object.
 

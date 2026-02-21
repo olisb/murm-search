@@ -366,9 +366,10 @@ function excludeGeoOutliers(coords) {
   return filtered.length > 0 ? filtered : coords;
 }
 
-function highlightResult(rank, profile) {
+function highlightResult(rank, profile, clickedCard) {
   document.querySelectorAll(".card, .mini-card").forEach((c) => c.classList.remove("active"));
-  const card = document.querySelector(`[data-rank="${rank}"]`);
+  // Use last matching card (most recent search) when no specific card is passed
+  const card = clickedCard || [...document.querySelectorAll(`[data-rank="${rank}"]`)].pop();
   if (card) {
     card.classList.add("active");
     card.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -449,10 +450,11 @@ function renderSearchResults(results, geoNote) {
   }
 
   attachReportButtons(container);
-  container.querySelectorAll(".card").forEach((card, i) => {
+  container.querySelectorAll(".card").forEach((card) => {
     card.addEventListener("click", (e) => {
       if (e.target.tagName === "A" || e.target.closest(".report-btn")) return;
-      highlightResult(parseInt(card.dataset.rank), results[parseInt(card.dataset.rank)]);
+      const rank = parseInt(card.dataset.rank);
+      highlightResult(rank, results[rank], card);
     });
   });
 }
@@ -561,7 +563,7 @@ function attachMiniCardClicks(container, results) {
     card.addEventListener("click", (e) => {
       if (e.target.tagName === "A" || e.target.closest(".report-btn")) return;
       const rank = parseInt(card.dataset.rank);
-      highlightResult(rank, results[rank]);
+      highlightResult(rank, results[rank], card);
     });
   });
 }

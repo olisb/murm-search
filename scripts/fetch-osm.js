@@ -113,6 +113,14 @@ const CATEGORIES = [
     outputFile: "osm-farm_shops.json",
   },
   {
+    name: "organic_shops",
+    tags: [
+      { key: "shop", value: "organic" },
+    ],
+    defaultTags: ["organic", "organic shop"],
+    outputFile: "osm-organic_shops.json",
+  },
+  {
     name: "nature_reserves",
     tags: [
       { key: "leisure", value: "nature_reserve" },
