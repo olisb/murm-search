@@ -49,6 +49,8 @@ try {
     "repair cafe": "repair cafes",
     "zero waste": "zero waste shops",
     "fair trade": "fair trade shops",
+    "marketplace": "marketplaces",
+    "market": "marketplaces",
   };
   for (const p of allProfiles) {
     for (const t of (p.tags || [])) {

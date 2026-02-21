@@ -1,12 +1,12 @@
 # CoBot
 
-Semantic search for co-ops, commons and community organisations worldwide, powered by the [Murmurations protocol](https://murmurations.network).
+Semantic search for co-ops, commons and community organisations worldwide, powered by the [Murmurations protocol](https://murmurations.network) and [OpenStreetMap](https://www.openstreetmap.org/).
 
 **Live:** [cobot.murmurations.network](https://cobot.murmurations.network/)
 
 ## What it does
 
-- Searches 16,000+ organisations by topic and location using AI-powered semantic search
+- Searches organisations by topic and location using AI-powered semantic search
 - Chat and search modes with an interactive map
 - Users can submit their own Murmurations profiles for instant indexing
 
@@ -31,7 +31,7 @@ The `ANTHROPIC_API_KEY` is optional — without it, chat mode is disabled and se
 
 ## Data
 
-Profile data comes from the [Murmurations Index API](https://docs.murmurations.network/). Run `node scripts/fetch-profiles.js` to rebuild the dataset.
+Profile data comes from the [Murmurations Index API](https://docs.murmurations.network/) and [OpenStreetMap](https://www.openstreetmap.org/) via the Overpass API. Run `node scripts/fetch-profiles.js` and `node scripts/fetch-osm.js` to rebuild the dataset.
 
 ## Contributing
 
