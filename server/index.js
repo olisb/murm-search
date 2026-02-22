@@ -1,8 +1,10 @@
+require("dotenv").config({ path: ".env.local" });
 require("dotenv").config();
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const Anthropic = require("@anthropic-ai/sdk");
+const { logQuery } = require("../api/_log");
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -51,6 +53,22 @@ try {
     "fair trade": "fair trade shops",
     "marketplace": "marketplaces",
     "market": "marketplaces",
+    "social centre": "social centres",
+    "health food shop": "health food shops",
+    "food bank": "food banks",
+    "soup kitchen": "food banks",
+    "vegetarian restaurant": "vegetarian restaurants",
+    "vegan restaurant": "vegan restaurants",
+    "botanical garden": "botanical gardens",
+    "tool library": "tool libraries",
+    "bike workshop": "bike workshops",
+    "bicycle repair": "bike workshops",
+    "national park": "national parks",
+    "bird hide": "bird hides",
+    "birdwatching": "bird hides",
+    "give box": "give boxes",
+    "wildlife sanctuary": "wildlife sanctuaries",
+    "eco campsite": "eco campsites",
   };
   for (const p of allProfiles) {
     for (const t of (p.tags || [])) {
@@ -379,6 +397,16 @@ app.post("/api/search", async (req, res) => {
       _idx: r.idx,
     }));
 
+    logQuery({
+      type: "search",
+      query: query || "",
+      geo: searchResult.geoTerms,
+      topic: searchTopic,
+      queryType: searchResult.queryType,
+      resultCount: results.length,
+      ip: req.headers["x-forwarded-for"] || req.socket?.remoteAddress,
+    }).catch(() => {});
+
     res.json({
       results,
       totalResults: searchResult.totalGeoMatches || searchResult.totalTopicMatches || results.length,
@@ -531,6 +559,8 @@ app.get("/admin", (req, res) => {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CoBot — Admin Reports</title>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-LB5K7C4GGQ"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-LB5K7C4GGQ');</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f1210; color: #d4ddd6; padding: 24px; }
@@ -708,6 +738,16 @@ app.post("/api/chat", async (req, res) => {
 - Topic filter: ${topicStr}${geoNote ? `\n- Note: ${geoNote}` : ""}`;
 
     const userMessage = `User query: "${query}"\n\n${metadata}\n\n${profileContext}`;
+
+    logQuery({
+      type: "chat",
+      query,
+      geo: geoTerms,
+      topic: topicStr,
+      queryType: searchResult.queryType || reqQueryType || "",
+      resultCount: profileList.length,
+      ip: req.headers["x-forwarded-for"] || req.socket?.remoteAddress,
+    }).catch(() => {});
 
     // Build messages with conversation history
     const messages = [];
@@ -1054,9 +1094,16 @@ app.post("/api/add-profile", async (req, res) => {
 });
 
 // -------------------------------------------------------------------
+// Admin query log (Vercel serverless function, also served locally)
+// -------------------------------------------------------------------
+const adminHandler = require("../api/admin");
+app.get("/api/admin", (req, res) => adminHandler(req, res));
+
+// -------------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`\n  CoBot running at http://localhost:${PORT}`);
-  console.log(`  Admin panel: http://localhost:${PORT}/admin`);
+  console.log(`  Admin panel: http://localhost:${PORT}/admin (reports)`);
+  console.log(`  Query log:   http://localhost:${PORT}/api/admin (requires ADMIN_PASSWORD)`);
   console.log(`  ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "set" : "NOT SET"}\n`);
 });

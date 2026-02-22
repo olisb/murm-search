@@ -136,6 +136,104 @@ const CATEGORIES = [
     defaultTags: ["nature reserve", "conservation"],
     outputFile: "osm-nature_reserves.json",
   },
+  {
+    name: "social_centres",
+    tags: [
+      { key: "amenity", value: "social_centre" },
+    ],
+    defaultTags: ["social centre"],
+    outputFile: "osm-social_centres.json",
+  },
+  {
+    name: "health_food_shops",
+    tags: [
+      { key: "shop", value: "health_food" },
+    ],
+    defaultTags: ["health food shop"],
+    outputFile: "osm-health_food_shops.json",
+  },
+  {
+    name: "food_banks",
+    tags: [
+      { key: "social_facility", value: "food_bank" },
+      { key: "social_facility", value: "soup_kitchen" },
+    ],
+    defaultTags: ["food bank"],
+    outputFile: "osm-food_banks.json",
+    tagLabel: (tags) => tags.social_facility === "soup_kitchen" ? "soup kitchen" : "food bank",
+  },
+  {
+    name: "vegetarian_restaurants",
+    tags: [
+      { key: "diet:vegetarian", value: "only" },
+    ],
+    defaultTags: ["vegetarian restaurant"],
+    outputFile: "osm-vegetarian_restaurants.json",
+  },
+  {
+    name: "vegan_restaurants",
+    tags: [
+      { key: "diet:vegan", value: "only" },
+    ],
+    defaultTags: ["vegan restaurant"],
+    outputFile: "osm-vegan_restaurants.json",
+  },
+  {
+    name: "botanical_gardens",
+    tags: [
+      { key: "garden:type", value: "botanical" },
+    ],
+    defaultTags: ["botanical garden"],
+    outputFile: "osm-botanical_gardens.json",
+  },
+  {
+    name: "tool_libraries",
+    tags: [
+      { key: "amenity", value: "tool_library" },
+    ],
+    defaultTags: ["tool library"],
+    outputFile: "osm-tool_libraries.json",
+  },
+  {
+    name: "bike_workshops",
+    tags: [
+      { key: "service:bicycle:diy", value: "yes" },
+    ],
+    defaultTags: ["bike workshop", "bicycle repair"],
+    outputFile: "osm-bike_workshops.json",
+  },
+  {
+    name: "national_parks",
+    tags: [
+      { key: "boundary", value: "national_park" },
+    ],
+    defaultTags: ["national park"],
+    outputFile: "osm-national_parks.json",
+  },
+  {
+    name: "bird_hides",
+    tags: [
+      { key: "leisure", value: "bird_hide" },
+    ],
+    defaultTags: ["bird hide", "birdwatching"],
+    outputFile: "osm-bird_hides.json",
+  },
+  {
+    name: "give_boxes",
+    tags: [
+      { key: "amenity", value: "give_box" },
+    ],
+    defaultTags: ["give box", "free shop"],
+    outputFile: "osm-give_boxes.json",
+  },
+  {
+    name: "wildlife_sanctuaries",
+    tags: [
+      { key: "boundary", value: "protected_area" },
+    ],
+    defaultTags: ["wildlife sanctuary", "protected area"],
+    outputFile: "osm-wildlife_sanctuaries.json",
+  },
 ];
 
 const COUNTRY_NAMES = {

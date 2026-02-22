@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { logQuery } = require("./_log");
 
 const EMBED_DIM = 384;
 const TOP_K_DISPLAY = 20;
@@ -258,6 +259,16 @@ module.exports = async function handler(req, res) {
       _relevance: r.rawSemantic > 0 ? Math.round(r.rawSemantic * 100) : null,
       _idx: r.idx,
     }));
+
+    logQuery({
+      type: "search",
+      query: query || "",
+      geo: searchResult.geoTerms,
+      topic: searchTopic,
+      queryType: searchResult.queryType,
+      resultCount: results.length,
+      ip: req.headers["x-forwarded-for"] || req.socket?.remoteAddress,
+    }).catch(() => {});
 
     res.json({
       results,
