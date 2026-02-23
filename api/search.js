@@ -267,7 +267,7 @@ module.exports = async function handler(req, res) {
       topic: searchTopic,
       queryType: searchResult.queryType,
       resultCount: results.length,
-      ip: req.headers["x-forwarded-for"] || req.socket?.remoteAddress,
+      ip: req.headers?.["x-forwarded-for"] || req.socket?.remoteAddress,
     }).catch(() => {});
 
     res.json({

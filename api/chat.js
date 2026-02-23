@@ -45,6 +45,8 @@ module.exports = async function handler(req, res) {
       const mockReq = {
         method: "POST",
         body: { query, geo, topic, queryType: reqQueryType, showAll },
+        headers: req.headers || {},
+        socket: req.socket,
       };
       const mockRes = {
         status: (code) => ({ json: (data) => reject(new Error(data.error || "Search failed")) }),
