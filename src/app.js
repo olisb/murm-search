@@ -740,12 +740,6 @@ async function handleChat(query) {
           addSearchOnlyResponse(allResults, geoNote);
         } else {
           // Stream the response
-          const cardsHtml = buildMiniCardsHtml(allResults);
-          const msg = addChatMessage("assistant",
-            `<div class="chat-bubble"></div>
-             <div class="chat-profiles">${cardsHtml}</div>`);
-          attachMiniCardClicks(msg, allResults);
-          const bubble = msg.querySelector(".chat-bubble");
           let fullText = "";
 
           const reader = res.body.getReader();
@@ -768,17 +762,13 @@ async function handleChat(query) {
                   console.error("Chat stream error:", chunk.error);
                   continue;
                 }
-                if (chunk.text) {
-                  fullText += chunk.text;
-                  bubble.textContent = fullText;
-                  msg.scrollIntoView({ behavior: "smooth", block: "start" });
-                }
+                if (chunk.text) fullText += chunk.text;
               } catch (e) {}
             }
           }
 
           if (fullText) {
-            bubble.innerHTML = linkifySuggestions(fullText);
+            addAssistantResponse(fullText, allResults);
             chatHistory.push({ role: "assistant", content: fullText });
           } else {
             addSearchOnlyResponse(allResults, geoNote);
