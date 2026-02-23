@@ -243,12 +243,20 @@ function extractTopicWords(query, geoTerms) {
     .filter(w => w.length >= 3 && !STOPWORDS.has(w) && !geoAliasWords.has(w));
 }
 
+function stemWord(w) {
+  if (w.endsWith("ies") && w.length > 4) return w.slice(0, -3) + "y";
+  if (w.endsWith("ses") || w.endsWith("xes") || w.endsWith("zes") || w.endsWith("ches") || w.endsWith("shes")) return w.slice(0, -2);
+  if (w.endsWith("s") && !w.endsWith("ss") && w.length > 3) return w.slice(0, -1);
+  return w;
+}
+
 function topicKeywordBoost(profile, topicWords) {
   if (topicWords.length === 0) return 0;
   const text = [profile.name, profile.description, ...(profile.tags || [])].filter(Boolean).join(" ").toLowerCase();
   let matches = 0;
   for (const word of topicWords) {
-    if (text.includes(word)) matches++;
+    const stem = stemWord(word);
+    if (text.includes(word) || (stem !== word && text.includes(stem))) matches++;
   }
   return matches / topicWords.length;
 }
@@ -675,7 +683,9 @@ STRICT LIMIT: 30 words or fewer. One or two short sentences only. Plain text. No
 
 Add value the cards can't: spot patterns, note gaps, suggest better searches. If results don't match, say so and suggest different terms. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.
 
-Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.`;
+Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.
+
+IMPORTANT: You DO cover ALL the categories listed above including national parks, wildlife sanctuaries, botanical gardens, bike workshops, tool libraries, etc. Never say you don't cover a category that's in your description. If asked "how many" of something, mention the results shown and note there may be more in the full dataset.`;
 }
 
 

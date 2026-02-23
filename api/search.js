@@ -130,11 +130,21 @@ function extractTopicWords(query, geoTerms) {
     .filter(w => w.length >= 3 && !STOPWORDS.has(w) && !geoWords.has(w));
 }
 
+function stemWord(w) {
+  if (w.endsWith("ies") && w.length > 4) return w.slice(0, -3) + "y";
+  if (w.endsWith("ses") || w.endsWith("xes") || w.endsWith("zes") || w.endsWith("ches") || w.endsWith("shes")) return w.slice(0, -2);
+  if (w.endsWith("s") && !w.endsWith("ss") && w.length > 3) return w.slice(0, -1);
+  return w;
+}
+
 function topicKeywordBoost(profile, topicWords) {
   if (topicWords.length === 0) return 0;
   const text = [profile.name, profile.description, ...(profile.tags || [])].filter(Boolean).join(" ").toLowerCase();
   let matches = 0;
-  for (const word of topicWords) if (text.includes(word)) matches++;
+  for (const word of topicWords) {
+    const stem = stemWord(word);
+    if (text.includes(word) || (stem !== word && text.includes(stem))) matches++;
+  }
   return matches / topicWords.length;
 }
 

@@ -21,7 +21,9 @@ STRICT LIMIT: 30 words or fewer. One or two short sentences only. Plain text. No
 
 Add value the cards can't: spot patterns, note gaps, suggest better searches. If results don't match, say so and suggest different terms. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.
 
-Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.`;
+Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.
+
+IMPORTANT: You DO cover ALL the categories listed above including national parks, wildlife sanctuaries, botanical gardens, bike workshops, tool libraries, etc. Never say you don't cover a category that's in your description. If asked "how many" of something, mention the results shown and note there may be more in the full dataset.`;
 }
 
 module.exports = async function handler(req, res) {
