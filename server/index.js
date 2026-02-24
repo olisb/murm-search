@@ -332,6 +332,12 @@ function searchProfilesServer(queryEmbedding, query, topK, llmParams) {
       const filtered = topResults.filter(r => r.rawSemantic >= RELEVANCE_THRESHOLD && r.kwBoost > 0);
 
       if (filtered.length === 0) {
+        // Fallback: use semantic relevance within geo results (not random description length)
+        const semanticFallback = scored.filter(r => r.rawSemantic >= RELEVANCE_THRESHOLD).slice(0, topK);
+        if (semanticFallback.length > 0) {
+          return { results: semanticFallback, geoNote, geoTerms, topicWords, queryType: "geo+topic-fallback", totalGeoMatches: geoMatchIndices.length, originalTopicWords: topicWords };
+        }
+        // Last resort: browse by description length
         const fallbackResults = geoMatchIndices.map(idx => {
           const p = profilesMeta[idx];
           const descLen = (p.description || "").length;
@@ -805,7 +811,9 @@ app.post("/api/chat", async (req, res) => {
 // -------------------------------------------------------------------
 // Query understanding (single LLM call replaces classifier + rewriter)
 // -------------------------------------------------------------------
-const UNDERSTAND_PROMPT = `You are the query understanding layer for CoBot, a search tool combining Murmurations and OpenStreetMap data — a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops, organic shops, nature reserves and NGOs across ${totalCountries} countries.
+const UNDERSTAND_PROMPT = `You are the query understanding layer for CoBot, a search tool combining Murmurations and OpenStreetMap data — a directory of ${totalProfiles} profiles across ${totalCountries} countries.
+
+Categories in the directory: co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste shops, fair trade shops, charity shops, farm shops, organic shops, marketplaces, nature reserves, NGOs, social centres, health food shops, food banks, vegetarian restaurants, vegan restaurants, botanical gardens, tool libraries, bike workshops, national parks, bird hides, give boxes, wildlife sanctuaries, eco campsites.
 
 Given the user's message and conversation history, determine what they want and return ONLY a JSON object.
 
@@ -823,8 +831,8 @@ Rules:
 - action is "search" for ANY message that mentions a topic, category, type of org, or location. This tool exists to search. Default to search.
 - action is "chat" ONLY for pure greetings ("hi"), meta-questions about the tool ("what is this", "how does this work"), or feedback ("thanks", "cool")
 - NEVER set action to "chat" when the message contains a searchable noun
-- geo: extract location names as simple place names only — "london", "berlin", "paris" — never composite strings like "England: London & SE". Resolve aliases: "UK" → ["England","Scotland","Wales","Northern Ireland"], "US"/"USA"/"america" → ["United States"], "deutschland" → ["Germany"], etc. Use the location names as they appear in the database.
-- topic: extract the subject matter, ignoring location words and filler. "show me all the orgs you have in australia" → topic is "", geo is ["Australia"], queryType is "geo-only", showAll is true
+- geo: extract location names as standard place names — use city/town names ("London", "Berlin"), region names ("Yorkshire", "Bavaria"), or country names ("France", "Germany"). NEVER use informal sub-areas like "North London", "East Berlin", "South Wales" — use the main place name instead ("London", "Berlin", "Wales"). Resolve aliases: "UK" → ["England","Scotland","Wales","Northern Ireland"], "US"/"USA"/"america" → ["United States"], "deutschland" → ["Germany"], etc.
+- topic: extract the subject matter, ignoring location words and filler. If the user asks for something NOT in our categories, use the closest category as topic. "bakery" → topic: "food" or "farm shop". "gym" → topic: "community". Always search — never refuse because a category doesn't match exactly.
 - When the user says "show me all/everything" or "what have you got" with only a location, set showAll: true, queryType: "geo-only", topic: ""
 - queryType: "geo-only" if geo but no topic, "topic-only" if topic but no geo, "geo+topic" if both
 - Look at conversation history to resolve follow-ups: "in the USA?" after "renewable energy worldwide" → geo: ["United States"], topic: "renewable energy", queryType: "geo+topic"
@@ -832,7 +840,8 @@ Rules:
 - "is [X] in your data" or "do you have [X]" → search for X
 - "show me all [X] you know about" → search for X
 - "do you know about [X]" → search for X
-- For chat responses: be brief and warm. One sentence. You are CoBot and you help people search a directory of co-ops, commons, community organisations, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops, nature reserves and NGOs. Guide them toward searching. No emoji. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.`;
+- "how many [X]" → search for X (action: "search", NOT "chat")
+- For chat responses: be brief and warm. One sentence. Guide them toward searching. No emoji. When suggesting a search, wrap it in quotes like "renewable energy cooperatives" so users can click it.`;
 
 app.post("/api/understand", async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;

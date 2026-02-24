@@ -206,9 +206,15 @@ function searchProfilesServer(queryEmbedding, query, topK, llmParams) {
       const filtered = scored.slice(0, topK).filter(r => r.rawSemantic >= RELEVANCE_THRESHOLD && r.kwBoost > 0);
 
       if (filtered.length === 0) {
-        const fallback = geoMatchIndices.map(idx => ({ idx, profile: profilesMeta[idx], score: (profilesMeta[idx].description || "").length, rawSemantic: 0, kwBoost: 0 }));
-        fallback.sort((a, b) => b.score - a.score);
-        return { results: fallback.slice(0, TOP_K_GEO_BROWSE), geoNote, geoTerms, topicWords, queryType: "geo+topic-fallback", totalGeoMatches: fallback.length };
+        // Fallback: use semantic relevance within geo results (not random description length)
+        const semanticFallback = scored.filter(r => r.rawSemantic >= RELEVANCE_THRESHOLD).slice(0, topK);
+        if (semanticFallback.length > 0) {
+          return { results: semanticFallback, geoNote, geoTerms, topicWords, queryType: "geo+topic-fallback", totalGeoMatches: geoMatchIndices.length };
+        }
+        // Last resort: browse by description length
+        const browseFallback = geoMatchIndices.map(idx => ({ idx, profile: profilesMeta[idx], score: (profilesMeta[idx].description || "").length, rawSemantic: 0, kwBoost: 0 }));
+        browseFallback.sort((a, b) => b.score - a.score);
+        return { results: browseFallback.slice(0, TOP_K_GEO_BROWSE), geoNote, geoTerms, topicWords, queryType: "geo+topic-fallback", totalGeoMatches: browseFallback.length };
       }
       return { results: filtered, geoNote, geoTerms, topicWords, queryType };
     }

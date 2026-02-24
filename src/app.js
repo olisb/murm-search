@@ -743,7 +743,13 @@ async function handleChat(query) {
           addAssistantError(data.error || "Something went wrong.");
           addSearchOnlyResponse(allResults, geoNote);
         } else {
-          // Stream the response
+          // Show cards immediately, stream LLM text into bubble
+          const cardsHtml = buildMiniCardsHtml(allResults);
+          const msg = addChatMessage("assistant",
+            `<div class="chat-bubble"></div>
+             <div class="chat-profiles">${cardsHtml}</div>`);
+          attachMiniCardClicks(msg, allResults);
+          const bubble = msg.querySelector(".chat-bubble");
           let fullText = "";
 
           const reader = res.body.getReader();
@@ -766,16 +772,20 @@ async function handleChat(query) {
                   console.error("Chat stream error:", chunk.error);
                   continue;
                 }
-                if (chunk.text) fullText += chunk.text;
+                if (chunk.text) {
+                  fullText += chunk.text;
+                  bubble.innerHTML = linkifySuggestions(fullText);
+                  msg.scrollIntoView({ behavior: "smooth", block: "end" });
+                }
               } catch (e) {}
             }
           }
 
           if (fullText) {
-            addAssistantResponse(fullText, allResults);
             chatHistory.push({ role: "assistant", content: fullText });
           } else {
-            addSearchOnlyResponse(allResults, geoNote);
+            // No LLM text — add a fallback message into the existing bubble
+            bubble.textContent = "Here are the most relevant organisations I found:";
           }
         }
       } catch (err) {
