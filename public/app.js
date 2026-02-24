@@ -605,25 +605,29 @@ function addSearchOnlyResponse(results, geoNote) {
   attachMiniCardClicks(msg, results);
 }
 
-function fireTryQuery(el) {
-  const query = el.textContent;
-  handleChat(query);
-}
-
-function fireTrySearch(el) {
-  const query = el.textContent;
-  const input = document.getElementById("search-input");
-  if (input) input.value = query;
-  handleSearch(query);
-}
-
 // Convert "quoted suggestions" in LLM text into clickable links
 function linkifySuggestions(text) {
   return text.replace(/\u201c([^\u201d]+)\u201d|"([^"]+)"/g, (match, q1, q2) => {
     const q = q1 || q2;
-    return `<a href="#" class="try-link" onclick="fireTryQuery(this); return false;">${escHtml(q)}</a>`;
+    return `<a href="#" class="try-link" data-try-chat="${escHtml(q)}">${escHtml(q)}</a>`;
   });
 }
+
+// Event delegation for all try-links (chat and search)
+document.addEventListener("click", (e) => {
+  const link = e.target.closest(".try-link");
+  if (!link) return;
+  e.preventDefault();
+  const query = link.dataset.tryChat || link.dataset.trySearch;
+  if (!query) return;
+  if (link.dataset.tryChat) {
+    handleChat(query);
+  } else {
+    const input = document.getElementById("search-input");
+    if (input) input.value = query;
+    handleSearch(query);
+  }
+});
 
 async function handleChat(query) {
   if (!query.trim() || chatBusy) return;
@@ -740,12 +744,6 @@ async function handleChat(query) {
           addSearchOnlyResponse(allResults, geoNote);
         } else {
           // Stream the response
-          const cardsHtml = buildMiniCardsHtml(allResults);
-          const msg = addChatMessage("assistant",
-            `<div class="chat-bubble"></div>
-             <div class="chat-profiles">${cardsHtml}</div>`);
-          attachMiniCardClicks(msg, allResults);
-          const bubble = msg.querySelector(".chat-bubble");
           let fullText = "";
 
           const reader = res.body.getReader();
@@ -768,17 +766,13 @@ async function handleChat(query) {
                   console.error("Chat stream error:", chunk.error);
                   continue;
                 }
-                if (chunk.text) {
-                  fullText += chunk.text;
-                  bubble.textContent = fullText;
-                  msg.scrollIntoView({ behavior: "smooth", block: "start" });
-                }
+                if (chunk.text) fullText += chunk.text;
               } catch (e) {}
             }
           }
 
           if (fullText) {
-            bubble.innerHTML = linkifySuggestions(fullText);
+            addAssistantResponse(fullText, allResults);
             chatHistory.push({ role: "assistant", content: fullText });
           } else {
             addSearchOnlyResponse(allResults, geoNote);

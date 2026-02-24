@@ -4,6 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CoBot — find co-ops, commons & community organisations worldwide</title>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-LB5K7C4GGQ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-LB5K7C4GGQ');
+  </script>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css">
   <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
@@ -46,7 +54,7 @@
         <div id="results"></div>
         <div id="empty-state" class="empty-state">
           <p>Type a query to search <strong id="empty-count"></strong> co-ops, commons & community organisations worldwide.</p>
-          <p class="examples">Try: <a href="#" class="try-link" onclick="fireTrySearch(this); return false;">permaculture projects in France</a>, <a href="#" class="try-link" onclick="fireTrySearch(this); return false;">housing cooperatives</a>, <a href="#" class="try-link" onclick="fireTrySearch(this); return false;">transition towns UK</a></p>
+          <p class="examples">Try: <a href="#" class="try-link" data-try-search="permaculture projects in France">permaculture projects in France</a>, <a href="#" class="try-link" data-try-search="housing cooperatives">housing cooperatives</a>, <a href="#" class="try-link" data-try-search="transition towns UK">transition towns UK</a></p>
         </div>
       </div>
 
@@ -55,7 +63,7 @@
         <div id="chat-messages">
           <div class="chat-msg assistant chat-welcome" style="visibility:hidden">
             <div class="chat-bubble">
-              <p>Hey! I'm CoBot — I search a directory of over <span id="welcome-count">20,000</span> co-ops, community projects, commons organisations, coworking spaces, repair cafes, charity shops, farm shops and more across 130+ countries. Try things like <a href="#" class="try-link" onclick="fireTryQuery(this); return false;">community energy in Wales</a> or <a href="#" class="try-link" onclick="fireTryQuery(this); return false;">open source projects in Berlin</a> or just name a place to see what's there.</p>
+              <p>Hey! I'm CoBot — I search a directory of over <span id="welcome-count">20,000</span> co-ops, community projects, commons organisations, coworking spaces, repair cafes, charity shops, farm shops and more across 130+ countries. Try things like <a href="#" class="try-link" data-try-chat="community energy in Wales">community energy in Wales</a> or <a href="#" class="try-link" data-try-chat="open source projects in Berlin">open source projects in Berlin</a> or just name a place to see what's there.</p>
 
             </div>
           </div>
@@ -71,6 +79,6 @@
     <div id="map"></div>
   </main>
 
-  <script type="module" src="app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
