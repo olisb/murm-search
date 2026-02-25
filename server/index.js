@@ -339,27 +339,28 @@ function searchProfilesServer(queryEmbedding, query, topK, llmParams) {
 
       const scored = geoMatchIndices.map(idx => scoreProfile(idx, 1));
       scored.sort((a, b) => b.score - a.score);
-      const topResults = scored.slice(0, topK);
-      const filtered = topResults.filter(r => r.rawSemantic >= RELEVANCE_THRESHOLD && r.kwBoost > 0);
 
-      if (filtered.length === 0) {
-        // Fallback: use semantic relevance within geo results (not random description length)
-        const semanticFallback = scored.filter(r => r.rawSemantic >= RELEVANCE_THRESHOLD).slice(0, topK);
-        if (semanticFallback.length > 0) {
-          return { results: semanticFallback, geoNote, geoTerms, topicWords, queryType: "geo+topic-fallback", totalGeoMatches: geoMatchIndices.length, originalTopicWords: topicWords };
-        }
-        // Last resort: browse by description length
-        const fallbackResults = geoMatchIndices.map(idx => {
-          const p = profilesMeta[idx];
-          const descLen = (p.description || "").length;
-          return { idx, profile: p, score: descLen, rawSemantic: 0, kwBoost: 0 };
-        });
-        fallbackResults.sort((a, b) => b.score - a.score);
-        const totalGeoMatches = fallbackResults.length;
-        return { results: fallbackResults.slice(0, TOP_K_GEO_BROWSE), geoNote, geoTerms, topicWords, queryType: "geo+topic-fallback", totalGeoMatches, originalTopicWords: topicWords };
+      // First try: keyword matches within geo (no semantic threshold needed — geo + keyword is strong enough)
+      const kwMatches = scored.filter(r => r.kwBoost > 0);
+      if (kwMatches.length > 0) {
+        const totalKwInGeo = kwMatches.length;
+        return { results: kwMatches.slice(0, topK), geoNote, geoTerms, topicWords, queryType, totalGeoMatches: totalKwInGeo };
       }
 
-      return { results: filtered, geoNote, geoTerms, topicWords, queryType };
+      // Fallback: use semantic relevance within geo results
+      const semanticFallback = scored.filter(r => r.rawSemantic >= RELEVANCE_THRESHOLD).slice(0, topK);
+      if (semanticFallback.length > 0) {
+        return { results: semanticFallback, geoNote, geoTerms, topicWords, queryType: "geo+topic-fallback", totalGeoMatches: geoMatchIndices.length, originalTopicWords: topicWords };
+      }
+      // Last resort: browse by description length
+      const fallbackResults = geoMatchIndices.map(idx => {
+        const p = profilesMeta[idx];
+        const descLen = (p.description || "").length;
+        return { idx, profile: p, score: descLen, rawSemantic: 0, kwBoost: 0 };
+      });
+      fallbackResults.sort((a, b) => b.score - a.score);
+      const totalGeoMatches = fallbackResults.length;
+      return { results: fallbackResults.slice(0, TOP_K_GEO_BROWSE), geoNote, geoTerms, topicWords, queryType: "geo+topic-fallback", totalGeoMatches, originalTopicWords: topicWords };
     }
 
     const triedLocations = [...new Set(geoTerms)].map(t => t.charAt(0).toUpperCase() + t.slice(1));
