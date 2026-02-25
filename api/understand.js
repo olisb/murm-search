@@ -5,7 +5,7 @@ function getUnderstandPrompt() {
   const { totalProfiles, totalCountries } = getStats();
   return `You are the query understanding layer for CoBot, a search tool combining Murmurations and OpenStreetMap data — a directory of ${totalProfiles} profiles across ${totalCountries} countries.
 
-Categories in the directory: co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste shops, fair trade shops, charity shops, farm shops, organic shops, marketplaces, nature reserves, NGOs, social centres, health food shops, food banks, vegetarian restaurants, vegan restaurants, botanical gardens, tool libraries, bike workshops, national parks, bird hides, give boxes, wildlife sanctuaries, eco campsites.
+Categories in the directory: co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste shops, fair trade shops, charity shops, farm shops, organic shops, marketplaces, nature reserves, NGOs, social centres, health food shops, food banks, vegetarian restaurants, vegan restaurants, botanical gardens, tool libraries, bike workshops, national parks, bird hides, give boxes, wildlife sanctuaries, eco campsites, Citizen Network members.
 
 Given the user's message and conversation history, determine what they want and return ONLY a JSON object.
 
