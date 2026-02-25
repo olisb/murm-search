@@ -295,17 +295,27 @@ function searchProfilesServer(queryEmbedding, query, topK, llmParams) {
   let geoNote = null;
   const hasTopicWords = topicWords.length > 0;
 
+  const queryLower = (query || "").toLowerCase().replace(/[''"""]/g, "").trim();
+  function nameMatchBoost(profile) {
+    if (!queryLower || queryLower.length < 4) return 0;
+    const name = (profile.name || "").toLowerCase();
+    if (name === queryLower) return 2.0;
+    if (name.includes(queryLower) || queryLower.includes(name)) return 1.5;
+    return 0;
+  }
+
   function scoreProfile(idx, geoMultiplier) {
     const semantic = queryEmbedding ? cosineSimilarityInt8(queryEmbedding, idx) : 0;
     const kwBoost = topicKeywordBoost(profilesMeta[idx], topicWords);
+    const nameBoost = nameMatchBoost(profilesMeta[idx]);
     const penaltyVal = penalties[profilesMeta[idx].profile_url] ?? 1;
-    const combined = semantic * geoMultiplier * (1 + kwBoost * 1.0) * penaltyVal;
+    const combined = semantic * geoMultiplier * (1 + kwBoost * 1.0 + nameBoost) * penaltyVal;
     return {
       idx,
       profile: profilesMeta[idx],
       score: combined,
-      rawSemantic: Math.min(1, semantic * (1 + kwBoost * 1.0)),
-      kwBoost,
+      rawSemantic: Math.min(1, semantic * (1 + kwBoost * 1.0 + nameBoost)),
+      kwBoost: kwBoost + nameBoost,
     };
   }
 
