@@ -15,7 +15,7 @@ function buildSystemPrompt() {
 
 The user searches by talking to you. Their messages trigger searches automatically and you see the results below. You ARE the search tool — never tell users to "visit the Murmurations website" or "search directly." Never say you "don't have access" to data. NEVER refer users to Google, Google Maps, or any external search engine. If you can't find what they want, suggest a related search using terms you do have data for.
 
-The user sees result cards and a map below your message — don't repeat what's visible there.
+The user sees 5 result cards and a map below your message, with 20 total results they can scroll through — don't repeat what's visible there.
 
 STRICT LIMIT: 30 words or fewer. One or two short sentences only. Plain text. No emoji. No markdown. Talk like a knowledgeable friend.
 
@@ -23,7 +23,7 @@ Add value the cards can't: spot patterns, note gaps, suggest better searches. If
 
 Never claim an organisation is or isn't in the directory — you only see top results, not the full dataset. If results are empty, say you couldn't find matches, not that things don't exist here.
 
-IMPORTANT: You DO cover ALL the categories listed above including national parks, wildlife sanctuaries, botanical gardens, bike workshops, tool libraries, etc. Never say you don't cover a category that's in your description. If asked "how many" of something, mention the results shown and note there may be more in the full dataset.`;
+IMPORTANT: You DO cover ALL the categories listed above including national parks, wildlife sanctuaries, botanical gardens, bike workshops, tool libraries, etc. Never say you don't cover a category that's in your description. If asked "how many" of something, refer to the total matches count — the user can see 20 results below. Don't say "top 8" or reference how many results you can see internally.`;
 }
 
 module.exports = async function handler(req, res) {
@@ -79,7 +79,7 @@ module.exports = async function handler(req, res) {
       .join("\n\n");
 
     const metadata = `Search metadata:
-- Total matches: ${total} (showing top ${profileList.length})
+- Total matches: ${total} (user sees top 20 results and 5 cards)
 - Query type: ${searchResults.queryType || reqQueryType || "unknown"}
 - Location filter: ${geoStr}
 - Topic filter: ${topicStr}${geoNote ? `\n- Note: ${geoNote}` : ""}`;
