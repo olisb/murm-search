@@ -9,8 +9,8 @@ function getStats() {
   try {
     const filePath = path.join(__dirname, "..", "public", "data", "profiles-meta.json");
     const profiles = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-    const countries = new Set(profiles.map((p) => p.country).filter(Boolean));
-    _stats = { totalProfiles: profiles.length, totalCountries: countries.size };
+    // Country data is inconsistent (mix of names, ISO codes, junk) so use approximate count
+    _stats = { totalProfiles: profiles.length, totalCountries: "100+" };
   } catch {
     _stats = { totalProfiles: 21955, totalCountries: 130 };
   }

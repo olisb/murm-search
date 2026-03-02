@@ -376,13 +376,12 @@ function highlightResult(rank, profile, clickedCard) {
   }
 
   if (profile && profile.latitude != null && profile.longitude != null) {
-    const loc = [profile.locality, profile.region, profile.country].filter(Boolean).join(", ");
     showResultPopup(profile, [profile.longitude, profile.latitude]);
   }
 }
 
 function showResultPopup(p, lngLat) {
-  const loc = [p.locality, p.region, p.country].filter(Boolean).join(", ");
+  const loc = p.location || [p.locality, p.region, p.country].filter(Boolean).join(", ");
   const urlHtml = p.primary_url
     ? `<a href="${escHtml(fullUrl(p.primary_url))}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px;text-decoration:none;">${escHtml(p.primary_url)}</a>`
     : "";
@@ -416,8 +415,7 @@ function renderSearchResults(results, geoNote) {
   empty.style.display = "none";
   container.innerHTML = results
     .map((p, i) => {
-      const locParts = [p.locality, p.region, p.country].filter(Boolean);
-      const location = locParts.join(", ");
+      const location = p.location || [p.locality, p.region, p.country].filter(Boolean).join(", ");
       const nameHtml = p.primary_url
         ? `<a href="${escHtml(fullUrl(p.primary_url))}" target="_blank" rel="noopener">${escHtml(p.name)}</a>`
         : escHtml(p.name);
@@ -490,7 +488,7 @@ async function handleSearch(query) {
 const CARDS_COLLAPSED = 5;
 
 function buildMiniCardHtml(p, i) {
-  const loc = [p.locality, p.region, p.country].filter(Boolean).join(", ");
+  const loc = p.location || [p.locality, p.region, p.country].filter(Boolean).join(", ");
   const nameHtml = p.primary_url
     ? `<a href="${escHtml(fullUrl(p.primary_url))}" target="_blank" rel="noopener">${escHtml(p.name)}</a>`
     : escHtml(p.name);
