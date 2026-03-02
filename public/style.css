@@ -1148,14 +1148,14 @@ body {
   .burger-menu.open + .header-nav {
     display: flex;
     flex-direction: column;
-    position: absolute;
-    top: 100%;
-    right: 0;
+    position: fixed;
+    top: 46px;
+    right: 10px;
     background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 8px 0;
-    z-index: 100;
+    z-index: 10000;
     box-shadow: 0 8px 24px var(--shadow);
   }
   .burger-menu.open + .header-nav .nav-link {
