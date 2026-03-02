@@ -1072,6 +1072,10 @@ body {
     border-radius: 0;
   }
 
+  /* Tighter header */
+  #header { gap: 8px; padding: 8px 10px; overflow: hidden; }
+  #chat-input { min-width: 0; }
+
   /* Compact cards on mobile */
   .card-name, .mini-card-name {
     overflow: hidden;
