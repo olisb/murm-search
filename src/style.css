@@ -34,12 +34,12 @@
 /* Light theme — applied via prefers-color-scheme OR data-theme attribute */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --bg: #f4f1ec;
-    --bg-surface: #ffffff;
+    --bg: #f0f4f1;
+    --bg-surface: #fafcfb;
     --bg-card: #ffffff;
-    --bg-card-hover: #eef5f0;
-    --bg-card-active: #e0ede4;
-    --border: #d0d8d2;
+    --bg-card-hover: #edf5ef;
+    --bg-card-active: #ddeee2;
+    --border: #c8d5cc;
     --text: #1a2e22;
     --text-dim: #5a7062;
     --text-muted: #8a9e90;
