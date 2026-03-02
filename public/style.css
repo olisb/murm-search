@@ -1,8 +1,9 @@
 /* ============================================================
-   Murm Search — Dark earth-tone theme
+   Murm Search — Earth-tone theme with light/dark auto-detect
    ============================================================ */
 
 :root {
+  /* Dark theme (default) */
   --bg: #0f1210;
   --bg-surface: #171d19;
   --bg-card: #1c2420;
@@ -17,8 +18,45 @@
   --accent-glow: rgba(78, 203, 113, 0.15);
   --tag-bg: #1a2e22;
   --tag-text: #6bc88a;
+  --text-on-accent: #fff;
+  --error: #e87070;
+  --error-bg: #1e1515;
+  --error-border: #4a2020;
+  --error-badge-bg: #3a1a1a;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow: rgba(0, 0, 0, 0.4);
+  --source-badge-bg: rgba(78, 203, 113, 0.1);
+  --map-ctrl-invert: invert(1) brightness(0.7);
   --radius: 8px;
   --sidebar-width: 420px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f1ec;
+    --bg-surface: #ffffff;
+    --bg-card: #ffffff;
+    --bg-card-hover: #eef5f0;
+    --bg-card-active: #e0ede4;
+    --border: #d0d8d2;
+    --text: #1a2e22;
+    --text-dim: #5a7062;
+    --text-muted: #8a9e90;
+    --accent: #1f8c42;
+    --accent-dim: #2a7a3e;
+    --accent-glow: rgba(31, 140, 66, 0.1);
+    --tag-bg: #e4f0e8;
+    --tag-text: #1f7a3a;
+    --text-on-accent: #fff;
+    --error: #c53030;
+    --error-bg: #fef2f2;
+    --error-border: #e8b0b0;
+    --error-badge-bg: #fde8e8;
+    --overlay: rgba(0, 0, 0, 0.3);
+    --shadow: rgba(0, 0, 0, 0.1);
+    --source-badge-bg: rgba(31, 140, 66, 0.08);
+    --map-ctrl-invert: none;
+  }
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -90,7 +128,7 @@ body {
 
 .mode-btn.active {
   background: var(--accent-dim);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .mode-btn:hover:not(.active) {
@@ -388,15 +426,15 @@ body {
   vertical-align: middle;
 }
 .card-source.osm {
-  background: rgba(78, 203, 113, 0.1);
+  background: var(--source-badge-bg);
   color: var(--text-muted);
 }
 .card-source.kvm {
-  background: rgba(78, 203, 113, 0.1);
+  background: var(--source-badge-bg);
   color: var(--text-muted);
 }
 .card-source.murm {
-  background: rgba(78, 203, 113, 0.1);
+  background: var(--source-badge-bg);
   color: var(--text-muted);
 }
 
@@ -431,7 +469,7 @@ body {
 
 .card-location {
   font-size: 12px;
-  color: #9aaba0;
+  color: var(--text-dim);
   margin-bottom: 6px;
 }
 
@@ -602,7 +640,7 @@ body {
 
 .chat-msg.user .chat-bubble {
   background: var(--accent-dim);
-  color: #fff;
+  color: var(--text-on-accent);
   border-bottom-right-radius: 2px;
 }
 
@@ -615,8 +653,8 @@ body {
 
 .chat-msg.assistant .chat-bubble.error {
   color: var(--text-muted);
-  border-color: #4a2020;
-  background: #1e1515;
+  border-color: var(--error-border);
+  background: var(--error-bg);
 }
 
 .chat-bubble.thinking {
@@ -705,7 +743,7 @@ body {
 
 .mini-card-loc {
   font-size: 11px;
-  color: #9aaba0;
+  color: var(--text-dim);
 }
 
 .mini-card-desc {
@@ -776,7 +814,7 @@ body {
   align-items: center;
   justify-content: center;
   background: var(--accent-dim);
-  color: #fff;
+  color: var(--text-on-accent);
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
@@ -808,7 +846,7 @@ body {
 }
 
 .maplibregl-ctrl-group button span {
-  filter: invert(1) brightness(0.7);
+  filter: var(--map-ctrl-invert);
 }
 
 /* ---- Loading indicator ---- */
@@ -833,7 +871,7 @@ body {
   padding: 10px 14px !important;
   font-size: 13px;
   max-width: 250px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
+  box-shadow: 0 4px 20px var(--shadow) !important;
 }
 
 .maplibregl-popup-tip {
@@ -905,9 +943,9 @@ body {
 }
 
 .report-btn:hover {
-  color: #e87070;
-  border-color: #e87070;
-  background: rgba(232, 112, 112, 0.1);
+  color: var(--error);
+  border-color: var(--error);
+  background: var(--error-bg);
 }
 
 /* Reported card state */
@@ -925,8 +963,8 @@ body {
   right: 8px;
   font-size: 10px;
   font-weight: 600;
-  color: #e87070;
-  background: #3a1a1a;
+  color: var(--error);
+  background: var(--error-badge-bg);
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -935,7 +973,7 @@ body {
 .report-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1009,7 +1047,7 @@ body {
 .report-feedback-send {
   padding: 8px 14px;
   background: var(--accent-dim);
-  color: #fff;
+  color: var(--text-on-accent);
   border: none;
   border-radius: var(--radius);
   font-size: 13px;
@@ -1065,7 +1103,7 @@ body {
     border-radius: var(--radius);
     padding: 8px 0;
     z-index: 100;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    box-shadow: 0 8px 24px var(--shadow);
   }
   .burger-menu.open + .header-nav .nav-link {
     padding: 8px 20px;

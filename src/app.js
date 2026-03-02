@@ -17,6 +17,7 @@ let chatBusy = false;
 let chatHistory = [];
 let reportedThisSession = new Set();
 let lastQuery = "";
+const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
 // -------------------------------------------------------------------
 // Data loading — lightweight map points + stats from server
@@ -56,23 +57,24 @@ async function checkChatAvailable() {
 // -------------------------------------------------------------------
 
 function initMap() {
+  const tileVariant = prefersDark ? "dark_all" : "light_all";
   map = new maplibregl.Map({
     container: "map",
     style: {
       version: 8,
       sources: {
-        "carto-dark": {
+        "carto-basemap": {
           type: "raster",
           tiles: [
-            "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-            "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+            `https://a.basemaps.cartocdn.com/${tileVariant}/{z}/{x}/{y}@2x.png`,
+            `https://b.basemaps.cartocdn.com/${tileVariant}/{z}/{x}/{y}@2x.png`,
           ],
           tileSize: 256,
           attribution: '&copy; <a href="https://carto.com">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
         },
       },
       layers: [
-        { id: "carto-dark", type: "raster", source: "carto-dark", minzoom: 0, maxzoom: 19 },
+        { id: "carto-basemap", type: "raster", source: "carto-basemap", minzoom: 0, maxzoom: 19 },
       ],
     },
     center: [0, 30],
@@ -104,8 +106,8 @@ function addBackgroundLayer() {
     source: "all-profiles",
     paint: {
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 1.5, 8, 3, 14, 5],
-      "circle-color": "#3a5040",
-      "circle-opacity": 0.4,
+      "circle-color": prefersDark ? "#3a5040" : "#1f8c42",
+      "circle-opacity": prefersDark ? 0.4 : 0.3,
     },
   });
 }
@@ -307,15 +309,18 @@ function plotResults(results) {
 
     const el = document.createElement("div");
     el.className = "result-marker";
+    const markerBg = prefersDark ? "#4ecb71" : "#1f8c42";
+    const markerBorder = prefersDark ? "#0f1210" : "#ffffff";
+    const markerText = prefersDark ? "#0f1210" : "#ffffff";
     el.style.cssText = `
       width: 24px; height: 24px;
-      background: #4ecb71;
-      border: 2px solid #0f1210;
+      background: ${markerBg};
+      border: 2px solid ${markerBorder};
       border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 700; color: #0f1210;
+      font-size: 11px; font-weight: 700; color: ${markerText};
       cursor: pointer;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
       transition: transform 0.15s;
     `;
     el.textContent = i + 1;
