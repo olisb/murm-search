@@ -103,18 +103,6 @@ let profilesMeta = [];
 let embInt8 = null;
 let embScales = null;
 
-try {
-  console.log("  Loading search data...");
-  profilesMeta = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "profiles-meta.json"), "utf8"));
-  embInt8 = new Int8Array(fs.readFileSync(path.join(DATA_DIR, "embeddings-int8.bin")).buffer);
-  embScales = new Float32Array(fs.readFileSync(path.join(DATA_DIR, "embeddings-scales.bin")).buffer);
-  console.log(`  Loaded ${profilesMeta.length} profiles, ${embInt8.length / EMBED_DIM} embedding vectors (Int8)`);
-  normalizeLocations();
-} catch (err) {
-  console.warn("  Could not load search data:", err.message);
-  console.warn("  Run: python scripts/quantize-embeddings.py");
-}
-
 const KNOWN_COUNTRIES = new Set([
   "united kingdom", "france", "germany", "spain", "italy", "belgium", "netherlands",
   "switzerland", "austria", "sweden", "portugal", "ireland", "denmark", "norway",
@@ -159,6 +147,18 @@ function normalizeLocations() {
     }
   }
   console.log("  Normalized location fields");
+}
+
+try {
+  console.log("  Loading search data...");
+  profilesMeta = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "profiles-meta.json"), "utf8"));
+  embInt8 = new Int8Array(fs.readFileSync(path.join(DATA_DIR, "embeddings-int8.bin")).buffer);
+  embScales = new Float32Array(fs.readFileSync(path.join(DATA_DIR, "embeddings-scales.bin")).buffer);
+  console.log(`  Loaded ${profilesMeta.length} profiles, ${embInt8.length / EMBED_DIM} embedding vectors (Int8)`);
+  normalizeLocations();
+} catch (err) {
+  console.warn("  Could not load search data:", err.message);
+  console.warn("  Run: python scripts/quantize-embeddings.py");
 }
 
 // -------------------------------------------------------------------
