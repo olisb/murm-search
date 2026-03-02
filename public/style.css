@@ -79,7 +79,7 @@ body {
   padding: 10px 16px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
-  z-index: 10;
+  z-index: 100;
   flex-shrink: 0;
 }
 
