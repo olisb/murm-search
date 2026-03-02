@@ -17,7 +17,14 @@ let chatBusy = false;
 let chatHistory = [];
 let reportedThisSession = new Set();
 let lastQuery = "";
-const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+// Theme detection: check localStorage override, then system preference
+function getTheme() {
+  const saved = localStorage.getItem("theme");
+  if (saved === "light" || saved === "dark") return saved;
+  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+const prefersDark = getTheme() === "dark";
 
 // -------------------------------------------------------------------
 // Data loading — lightweight map points + stats from server
@@ -888,6 +895,18 @@ async function init() {
   document.getElementById("chat-send").addEventListener("click", () => {
     handleChat(chatInput.value);
   });
+
+  // Theme toggle
+  const themeBtn = document.getElementById("theme-toggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const newTheme = getTheme() === "dark" ? "light" : "dark";
+      localStorage.setItem("theme", newTheme);
+      document.documentElement.setAttribute("data-theme", newTheme);
+      // Reload page to switch map tiles
+      location.reload();
+    });
+  }
 }
 
 init();
