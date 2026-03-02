@@ -773,7 +773,7 @@ async function handleChat(query) {
                 if (chunk.text) {
                   fullText += chunk.text;
                   bubble.innerHTML = linkifySuggestions(fullText);
-                  msg.scrollIntoView({ behavior: "smooth", block: "end" });
+                  bubble.scrollIntoView({ behavior: "smooth", block: "start" });
                 }
               } catch (e) {}
             }
