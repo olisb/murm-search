@@ -109,9 +109,56 @@ try {
   embInt8 = new Int8Array(fs.readFileSync(path.join(DATA_DIR, "embeddings-int8.bin")).buffer);
   embScales = new Float32Array(fs.readFileSync(path.join(DATA_DIR, "embeddings-scales.bin")).buffer);
   console.log(`  Loaded ${profilesMeta.length} profiles, ${embInt8.length / EMBED_DIM} embedding vectors (Int8)`);
+  normalizeLocations();
 } catch (err) {
   console.warn("  Could not load search data:", err.message);
   console.warn("  Run: python scripts/quantize-embeddings.py");
+}
+
+const KNOWN_COUNTRIES = new Set([
+  "united kingdom", "france", "germany", "spain", "italy", "belgium", "netherlands",
+  "switzerland", "austria", "sweden", "portugal", "ireland", "denmark", "norway",
+  "finland", "poland", "greece", "hungary", "czech republic", "romania", "bulgaria",
+  "croatia", "slovakia", "slovenia", "luxembourg", "estonia", "latvia", "lithuania",
+  "united states", "canada", "mexico", "brazil", "argentina", "colombia", "chile",
+  "australia", "new zealand", "japan", "india", "china", "south korea", "kenya",
+  "south africa", "nigeria", "egypt", "morocco", "tunisia", "senegal", "ecuador",
+  "peru", "bolivia", "uruguay", "costa rica", "guatemala", "philippines", "thailand",
+  "vietnam", "indonesia", "malaysia", "taiwan", "israel", "turkey", "russia", "ukraine",
+]);
+
+function normalizeLocations() {
+  for (const p of profilesMeta) {
+    for (const f of ["locality", "region", "country"]) {
+      if (p[f]) p[f] = p[f].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+    }
+    if (p.country && /[|:]/.test(p.country)) {
+      const pipeSegments = p.country.split(/\s*\|\s*/).map(s => s.trim()).filter(Boolean);
+      let country = null;
+      let regionSegments = [];
+      for (const seg of pipeSegments) {
+        const clean = seg.includes(":") ? seg.split(":")[0].trim() : seg;
+        const cleanLower = clean.replace(/\s+-\s+\S+$/, "").toLowerCase();
+        if (!country && KNOWN_COUNTRIES.has(cleanLower)) {
+          country = clean.replace(/\s+-\s+\S+$/, "");
+        } else {
+          regionSegments.push(seg);
+        }
+      }
+      if (!country) {
+        let last = pipeSegments[pipeSegments.length - 1];
+        if (last.includes(":")) last = last.split(":")[0].trim();
+        country = last.replace(/\s+-\s+\S+$/, "");
+        regionSegments = pipeSegments.slice(0, -1);
+      }
+      if (!p.region && regionSegments.length > 0) {
+        const seg = regionSegments[0];
+        p.region = seg.includes(":") ? seg.split(":")[0].trim() : seg;
+      }
+      p.country = country;
+    }
+  }
+  console.log("  Normalized location fields");
 }
 
 // -------------------------------------------------------------------
@@ -329,8 +376,14 @@ function searchProfilesServer(queryEmbedding, query, topK, llmParams) {
       if (!hasTopicWords) {
         const results = geoMatchIndices.map(idx => {
           const p = profilesMeta[idx];
-          const descLen = (p.description || "").length;
-          return { idx, profile: p, score: descLen, rawSemantic: 0, kwBoost: 0 };
+          // Prioritize locality matches over region/country matches
+          let matchTier = 0;
+          for (const term of geoTerms) {
+            if (p.locality && p.locality.toLowerCase().includes(term)) matchTier = Math.max(matchTier, 3);
+            else if (p.region && p.region.toLowerCase().includes(term)) matchTier = Math.max(matchTier, 2);
+            else if (p.country && p.country.toLowerCase().includes(term)) matchTier = Math.max(matchTier, 1);
+          }
+          return { idx, profile: p, score: matchTier * 1e6 + (p.description || "").length, rawSemantic: 0, kwBoost: 0 };
         });
         results.sort((a, b) => b.score - a.score);
         const totalGeoMatches = results.length;
@@ -416,12 +469,26 @@ app.post("/api/search", async (req, res) => {
 
     const searchResult = searchProfilesServer(queryEmbedding, query || searchTopic, TOP_K_DISPLAY, llmParams);
 
-    // Strip internal idx from results, add _relevance
-    const results = searchResult.results.map(r => ({
-      ...r.profile,
-      _relevance: r.rawSemantic > 0 ? Math.round(r.rawSemantic * 100) : null,
-      _idx: r.idx,
-    }));
+    // Strip internal idx from results, add _relevance, clean location, truncate description
+    const results = searchResult.results.map(r => {
+      const p = r.profile;
+      const locParts = [p.locality, p.region, p.country].filter(Boolean);
+      const seen = new Set();
+      const location = locParts.filter(part => {
+        const lower = part.toLowerCase();
+        if (seen.has(lower)) return false;
+        seen.add(lower);
+        return true;
+      }).join(", ");
+
+      return {
+        ...p,
+        description: (p.description || "").slice(0, 300),
+        location,
+        _relevance: r.rawSemantic > 0 ? Math.round(r.rawSemantic * 100) : null,
+        _idx: r.idx,
+      };
+    });
 
     logQuery({
       type: "search",
