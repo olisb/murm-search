@@ -1192,6 +1192,13 @@ app.post("/api/add-profile", async (req, res) => {
 });
 
 // -------------------------------------------------------------------
+// Share (save/load shared results)
+// -------------------------------------------------------------------
+const shareHandler = require("../api/share");
+app.post("/api/share", (req, res) => shareHandler(req, res));
+app.get("/api/share", (req, res) => shareHandler(req, res));
+
+// -------------------------------------------------------------------
 // Admin query log (Vercel serverless function, also served locally)
 // -------------------------------------------------------------------
 const adminHandler = require("../api/admin");

@@ -599,13 +599,14 @@ function addSearchOnlyResponse(results, geoNote) {
   if (results.length === 0) {
     addChatMessage("assistant",
       `<div class="chat-bubble">I couldn't find a good match for that in the network. Try broadening your search — for example, use more general terms or a wider location.</div>`);
-    return;
+    return null;
   }
-  const noteHtml = geoNote
-    ? `<div class="chat-bubble">${escHtml(geoNote)}</div>`
+  const noteText = geoNote
+    ? geoNote
     : results.length < 3
-      ? `<div class="chat-bubble">I only found ${results.length} close match${results.length === 1 ? "" : "es"} for that query:</div>`
-      : `<div class="chat-bubble">Here are the most relevant organisations I found:</div>`;
+      ? `I only found ${results.length} close match${results.length === 1 ? "" : "es"} for that query:`
+      : "Here are the most relevant organisations I found:";
+  const noteHtml = `<div class="chat-bubble">${escHtml(noteText)}</div>`;
   const cardsHtml = buildMiniCardsHtml(results);
   const msg = addChatMessage(
     "assistant",
@@ -613,6 +614,76 @@ function addSearchOnlyResponse(results, geoNote) {
      <div class="chat-profiles">${cardsHtml}</div>`
   );
   attachMiniCardClicks(msg, results);
+  return { msg, text: noteText };
+}
+
+// -------------------------------------------------------------------
+// Share button
+// -------------------------------------------------------------------
+
+const SHARE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
+
+function addShareButton(msgEl, query, text, results) {
+  // Strip heavy fields from results before saving
+  const slim = results.map(p => ({
+    name: p.name, primary_url: p.primary_url, profile_url: p.profile_url,
+    location: p.location, locality: p.locality, region: p.region, country: p.country,
+    description: p.description, tags: p.tags, source: p.source,
+    latitude: p.latitude, longitude: p.longitude, _relevance: p._relevance,
+  }));
+
+  const btn = document.createElement("button");
+  btn.className = "share-btn";
+  btn.title = "Share this result";
+  btn.innerHTML = SHARE_SVG + " Share";
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, text, results: slim, mode: "chat" }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      const url = window.location.origin + "/#s=" + data.id;
+      history.replaceState(null, "", "/#s=" + data.id);
+      await navigator.clipboard.writeText(url);
+      // Show tooltip
+      const tip = document.createElement("span");
+      tip.className = "share-tooltip";
+      tip.textContent = "Link copied to clipboard!";
+      btn.appendChild(tip);
+      setTimeout(() => tip.remove(), 2000);
+    } catch (err) {
+      console.error("Share error:", err);
+      const tip = document.createElement("span");
+      tip.className = "share-tooltip";
+      tip.textContent = "Failed to share";
+      btn.appendChild(tip);
+      setTimeout(() => tip.remove(), 2000);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // Wrap show-more + share in a flex row inside .chat-profiles
+  const profiles = msgEl.querySelector(".chat-profiles");
+  if (profiles) {
+    const showMore = profiles.querySelector(".show-more-btn");
+    const row = document.createElement("div");
+    row.className = "cards-actions";
+    if (showMore) {
+      profiles.insertBefore(row, showMore);
+      row.appendChild(showMore);
+    } else {
+      profiles.appendChild(row);
+    }
+    row.appendChild(btn);
+  } else {
+    msgEl.appendChild(btn);
+  }
 }
 
 // Convert "quoted suggestions" in LLM text into clickable links
@@ -717,7 +788,10 @@ async function handleChat(query) {
       removeThinkingBubble();
       const count = totalResults || allResults.length;
       const showing = allResults.length < count ? ` Showing top ${allResults.length}.` : "";
-      addAssistantResponse(`${count} organisations found.${showing}`, allResults);
+      const geoText = `${count} organisations found.${showing}`;
+      addAssistantResponse(geoText, allResults);
+      const lastMsg = document.querySelector("#chat-messages .chat-msg:last-child");
+      if (lastMsg) addShareButton(lastMsg, query, geoText, allResults);
       chatHistory.push({ role: "user", content: query });
       chatHistory.push({ role: "assistant", content: `${count} organisations found.` });
       chatBusy = false;
@@ -751,7 +825,8 @@ async function handleChat(query) {
           const data = await res.json().catch(() => ({}));
           console.error("Chat API error:", data.error);
           addAssistantError(data.error || "Something went wrong.");
-          addSearchOnlyResponse(allResults, geoNote);
+          const soRes = addSearchOnlyResponse(allResults, geoNote);
+          if (soRes) addShareButton(soRes.msg, query, soRes.text, allResults);
         } else {
           // Show cards immediately, stream LLM text into bubble
           const cardsHtml = buildMiniCardsHtml(allResults);
@@ -794,18 +869,21 @@ async function handleChat(query) {
           if (fullText) {
             chatHistory.push({ role: "assistant", content: fullText });
           } else {
-            // No LLM text — add a fallback message into the existing bubble
-            bubble.textContent = "Here are the most relevant organisations I found:";
+            fullText = "Here are the most relevant organisations I found:";
+            bubble.textContent = fullText;
           }
+          addShareButton(msg, query, fullText, allResults);
         }
       } catch (err) {
         console.error("Chat fetch error:", err);
         removeThinkingBubble();
-        addSearchOnlyResponse(allResults, geoNote);
+        const soRes2 = addSearchOnlyResponse(allResults, geoNote);
+        if (soRes2) addShareButton(soRes2.msg, query, soRes2.text, allResults);
       }
     } else {
       removeThinkingBubble();
-      addSearchOnlyResponse(allResults, geoNote);
+      const soRes3 = addSearchOnlyResponse(allResults, geoNote);
+      if (soRes3) addShareButton(soRes3.msg, query, soRes3.text, allResults);
     }
   } catch (err) {
     console.error("Chat error:", err);
@@ -868,8 +946,31 @@ async function init() {
     setMode("chat");
   }
 
-  const welcome = document.querySelector(".chat-welcome");
-  if (welcome) welcome.style.visibility = "visible";
+  // Check for shared result in URL hash
+  let sharedLoaded = false;
+  const shareMatch = window.location.hash.match(/^#s=([a-z0-9]+)$/);
+  if (shareMatch) {
+    try {
+      const shareRes = await fetch("/api/share?id=" + shareMatch[1]);
+      const shareData = await shareRes.json();
+      if (shareData.ok && shareData.results) {
+        setMode("chat");
+        addUserBubble(shareData.query);
+        addAssistantResponse(shareData.text, shareData.results);
+        const lastMsg = document.querySelector("#chat-messages .chat-msg:last-child");
+        if (lastMsg) addShareButton(lastMsg, shareData.query, shareData.text, shareData.results);
+        plotResults(shareData.results);
+        sharedLoaded = true;
+      }
+    } catch (err) {
+      console.error("Failed to load shared result:", err);
+    }
+  }
+
+  if (!sharedLoaded) {
+    const welcome = document.querySelector(".chat-welcome");
+    if (welcome) welcome.style.visibility = "visible";
+  }
 
   // Search mode input
   const searchInput = document.getElementById("search-input");
