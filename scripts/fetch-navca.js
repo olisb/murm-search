@@ -20,15 +20,19 @@ const kml = fs.readFileSync(KML_PATH, "utf-8");
 const placemarks = [...kml.matchAll(/<Placemark>([\s\S]*?)<\/Placemark>/g)].map(m => m[1]);
 console.log(`Found ${placemarks.length} placemarks`);
 
+function stripCdata(s) {
+  return s.replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "").trim();
+}
+
 function extract(xml, tag) {
   const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
-  return m ? m[1].trim() : "";
+  return m ? stripCdata(m[1].trim()) : "";
 }
 
 function extractData(xml, name) {
   const re = new RegExp(`<Data name="${name}">[\\s\\S]*?<value>([\\s\\S]*?)<\\/value>`, "i");
   const m = xml.match(re);
-  return m ? m[1].trim() : "";
+  return m ? stripCdata(m[1].trim()) : "";
 }
 
 // Geocode UK postcodes via postcodes.io (free, no API key)
