@@ -522,7 +522,7 @@ app.post("/api/search", async (req, res) => {
           return true;
         }).join(", ");
 
-        results.push({
+        results.unshift({
           ...up,
           description: (up.description || "").slice(0, 300),
           location,
