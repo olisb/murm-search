@@ -455,7 +455,7 @@ function renderSearchResults(results, geoNote) {
   if (results.length > CARDS_COLLAPSED) {
     const extra = results.length - CARDS_COLLAPSED;
     container.insertAdjacentHTML("beforeend",
-      `<button class="show-more-btn" onclick="this.parentElement.classList.add('expanded'); this.remove();">Show ${extra} more</button>`
+      `<button class="show-more-btn" onclick="(this.closest('.chat-profiles')||this.parentElement).classList.add('expanded'); this.remove();">Show ${extra} more</button>`
     );
   }
 
@@ -530,7 +530,7 @@ function buildMiniCardsHtml(results) {
   let html = results.map((p, i) => buildMiniCardHtml(p, i)).join("");
   if (results.length > CARDS_COLLAPSED) {
     const extra = results.length - CARDS_COLLAPSED;
-    html += `<button class="show-more-btn" onclick="this.parentElement.classList.add('expanded'); this.remove();">Show ${extra} more</button>`;
+    html += `<button class="show-more-btn" onclick="(this.closest('.chat-profiles')||this.parentElement).classList.add('expanded'); this.remove();">Show ${extra} more</button>`;
   }
   return html;
 }
