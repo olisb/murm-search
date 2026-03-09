@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const Anthropic = require("@anthropic-ai/sdk");
 const { logQuery } = require("../api/_log");
+const { saveUserProfile } = require("../api/_user-profiles");
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -489,6 +490,47 @@ app.post("/api/search", async (req, res) => {
         _idx: r.idx,
       };
     });
+
+    // Merge user-submitted profiles (keyword match)
+    if (userProfiles.length > 0) {
+      const existingUrls = new Set(results.map(r => r.profile_url));
+      const geoTerms = searchResult.geoTerms || [];
+      const topicWords = searchResult.topicWords || [];
+
+      for (const entry of userProfiles) {
+        const up = entry.profile;
+        if (existingUrls.has(up.profile_url)) continue;
+
+        if (geoTerms.length > 0) {
+          const geoMatch = profileMatchesGeo(up, geoTerms);
+          const textMatch = geoTerms.some(term => {
+            const text = [up.name, up.description, ...(up.tags || [])].filter(Boolean).join(" ").toLowerCase();
+            return text.includes(term);
+          });
+          if (!geoMatch && !textMatch) continue;
+        }
+
+        const kwBoost = topicKeywordBoost(up, topicWords);
+        if (topicWords.length > 0 && kwBoost === 0) continue;
+
+        const locParts = [up.locality, up.region, up.country].filter(Boolean);
+        const locSeen = new Set();
+        const location = locParts.filter(part => {
+          const lower = part.toLowerCase();
+          if (locSeen.has(lower)) return false;
+          locSeen.add(lower);
+          return true;
+        }).join(", ");
+
+        results.push({
+          ...up,
+          description: (up.description || "").slice(0, 300),
+          location,
+          _relevance: null,
+          _idx: -1,
+        });
+      }
+    }
 
     logQuery({
       type: "search",
@@ -1182,6 +1224,10 @@ app.post("/api/add-profile", async (req, res) => {
     }
 
     saveUserProfiles(userProfiles);
+
+    // Also store in Redis so Vercel deployments can find it
+    saveUserProfile(profile).catch(err => console.error("[user-profiles] Redis save failed:", err.message));
+
     console.log(`[user-profiles] ${existingIdx >= 0 ? "Updated" : "Added"}: ${profile.name}`);
 
     res.json({ ok: true, profile });

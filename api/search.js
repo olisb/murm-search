@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { logQuery } = require("./_log");
+const { getAllUserProfiles } = require("./_user-profiles");
 
 const EMBED_DIM = 384;
 const TOP_K_DISPLAY = 20;
@@ -371,6 +372,55 @@ module.exports = async function handler(req, res) {
         _idx: r.idx,
       };
     });
+
+    // Merge user-submitted profiles from Redis (keyword match, no embeddings needed)
+    try {
+      const userProfiles = await getAllUserProfiles();
+      if (userProfiles.length > 0) {
+        const existingUrls = new Set(results.map(r => r.profile_url));
+        const geoTerms = searchResult.geoTerms || [];
+        const topicWords = searchResult.topicWords || [];
+
+        for (const up of userProfiles) {
+          if (existingUrls.has(up.profile_url)) continue;
+
+          // For user profiles, check geo against location fields AND name/description/tags
+          // (user profiles often lack structured location data)
+          if (geoTerms.length > 0) {
+            const geoMatch = profileMatchesGeo(up, geoTerms);
+            const textMatch = geoTerms.some(term => {
+              const text = [up.name, up.description, ...(up.tags || [])].filter(Boolean).join(" ").toLowerCase();
+              return text.includes(term);
+            });
+            if (!geoMatch && !textMatch) continue;
+          }
+
+          // Check keyword match (skip if topic words exist but none match)
+          const kwBoost = topicKeywordBoost(up, topicWords);
+          if (topicWords.length > 0 && kwBoost === 0) continue;
+
+          // Build location string
+          const locParts = [up.locality, up.region, up.country].filter(Boolean);
+          const locSeen = new Set();
+          const location = locParts.filter(part => {
+            const lower = part.toLowerCase();
+            if (locSeen.has(lower)) return false;
+            locSeen.add(lower);
+            return true;
+          }).join(", ");
+
+          results.push({
+            ...up,
+            description: (up.description || "").slice(0, 300),
+            location,
+            _relevance: null,
+            _idx: -1,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[search] User profiles lookup failed:", err.message);
+    }
 
     logQuery({
       type: "search",

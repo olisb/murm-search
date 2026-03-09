@@ -120,19 +120,6 @@
           throw new Error(data.error || "Failed to add profile");
         }
 
-        if (data.clientSideEmbed) {
-          // Vercel mode: store profile in localStorage, embedding will happen on search page load
-          const stored = JSON.parse(localStorage.getItem("murm-user-profiles") || "[]");
-          const existingIdx = stored.findIndex((e) => e.profile.profile_url === url);
-          const entry = { profile: data.profile, embedding: null };
-          if (existingIdx >= 0) {
-            stored[existingIdx] = entry;
-          } else {
-            stored.push(entry);
-          }
-          localStorage.setItem("murm-user-profiles", JSON.stringify(stored));
-        }
-
         status.style.color = "#4ecb71";
         status.innerHTML = '<strong>' + escHtml(data.profile.name) + '</strong> — Your profile is now searchable! <a href="/" style="color:#4ecb71;">Go to search</a>';
         input.value = "";

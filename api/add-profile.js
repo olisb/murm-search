@@ -1,3 +1,5 @@
+const { saveUserProfile } = require("./_user-profiles");
+
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -49,7 +51,12 @@ module.exports = async function handler(req, res) {
     source: "user-submitted",
   };
 
-  // On Vercel we can't write to the filesystem or run a local embedding model.
-  // Return the profile so the client can embed it in-browser and store in localStorage.
-  res.json({ ok: true, profile, clientSideEmbed: true });
+  // Store in Redis so it's searchable immediately
+  try {
+    await saveUserProfile(profile);
+  } catch (err) {
+    console.error("[add-profile] Redis save failed:", err.message);
+  }
+
+  res.json({ ok: true, profile });
 };
