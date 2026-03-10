@@ -140,6 +140,14 @@ function setupBackgroundClicks() {
   map.on("click", "all-profiles-layer", (e) => {
     e.preventDefault();
     if (!e.features || e.features.length === 0) return;
+    // Skip if a numbered result marker is near the click point
+    if (resultMarkers.length > 0) {
+      const clickPt = e.point;
+      for (const m of resultMarkers) {
+        const mPt = map.project(m.getLngLat());
+        if (Math.abs(clickPt.x - mPt.x) < 20 && Math.abs(clickPt.y - mPt.y) < 20) return;
+      }
+    }
     const idx = e.features[0].properties.idx;
     const p = mapPoints[idx];
     if (!p) return;
@@ -336,7 +344,10 @@ function plotResults(results) {
       .setLngLat([p.longitude, p.latitude])
       .addTo(map);
 
-    el.addEventListener("click", () => highlightResult(i, p));
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      highlightResult(i, p);
+    });
 
     resultMarkers.push(marker);
     coords.push([p.longitude, p.latitude]);
