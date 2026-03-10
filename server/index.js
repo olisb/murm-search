@@ -823,39 +823,23 @@ app.post("/api/chat", async (req, res) => {
   }
 
   try {
-    const { query, geo, topic, queryType: reqQueryType, showAll, geoNote: reqGeoNote, history = [] } = req.body;
+    const { query, searchResults, queryType: reqQueryType, geoNote: reqGeoNote, history = [] } = req.body;
     if (!query || typeof query !== "string") {
       return res.status(400).json({ error: "Missing query" });
     }
-
-    // Run search internally to get top results
-    let queryEmbedding = null;
-    const searchTopic = topic || query;
-    const llmParams = { geo: geo || [], topic: topic || "", queryType: reqQueryType || null, showAll: showAll || false };
-    const effectiveQueryType = llmParams.queryType || "topic-only";
-
-    if (searchTopic && effectiveQueryType !== "geo-only") {
-      const expanded = "Organisation or project related to: " + searchTopic;
-      const embed = await getEmbedder();
-      const output = await embed(expanded, { pooling: "mean", normalize: true });
-      queryEmbedding = Array.from(output.data);
+    if (!searchResults || !searchResults.results) {
+      return res.status(400).json({ error: "Missing searchResults" });
     }
 
-    const searchResult = searchProfilesServer(queryEmbedding, query, TOP_K_DISPLAY, llmParams);
-    const profileList = searchResult.results.slice(0, TOP_K_LLM).map(r => ({
-      ...r.profile,
-      _relevance: r.rawSemantic > 0 ? Math.round(r.rawSemantic * 100) : null,
-    }));
-
-    const total = searchResult.totalGeoMatches || searchResult.totalTopicMatches || searchResult.results.length;
-    const geoNote = reqGeoNote || searchResult.geoNote;
-    const geoTerms = searchResult.geoTerms || [];
-    const topicKeywords = searchResult.topicWords || [];
+    const profileList = searchResults.results.slice(0, 8);
+    const total = searchResults.totalResults || profileList.length;
+    const geoNote = reqGeoNote || searchResults.geoNote;
+    const geoTerms = searchResults.geoTerms || [];
+    const topicKeywords = searchResults.topicWords || [];
 
     const geoStr = geoTerms.length > 0 ? geoTerms.join(", ") : "none";
     const topicStr = topicKeywords.length > 0 ? topicKeywords.join(", ") : "none";
 
-    // Build profile context
     const profileContext = profileList
       .slice(0, 8)
       .map((p, i) => {
@@ -869,8 +853,8 @@ app.post("/api/chat", async (req, res) => {
       .join("\n\n");
 
     const metadata = `Search metadata:
-- Total matches: ${total} (showing top ${profileList.length})
-- Query type: ${searchResult.queryType || reqQueryType || "unknown"}
+- Total matches: ${total} (user sees top 20 results and 5 cards)
+- Query type: ${searchResults.queryType || reqQueryType || "unknown"}
 - Location filter: ${geoStr}
 - Topic filter: ${topicStr}${geoNote ? `\n- Note: ${geoNote}` : ""}`;
 
@@ -881,7 +865,7 @@ app.post("/api/chat", async (req, res) => {
       query,
       geo: geoTerms,
       topic: topicStr,
-      queryType: searchResult.queryType || reqQueryType || "",
+      queryType: searchResults.queryType || reqQueryType || "",
       resultCount: profileList.length,
       ip: req.headers["x-forwarded-for"] || req.socket?.remoteAddress,
     }).catch(() => {});

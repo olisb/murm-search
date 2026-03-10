@@ -2,13 +2,6 @@ const Anthropic = require("@anthropic-ai/sdk");
 const { getStats } = require("./_stats");
 const { logQuery } = require("./_log");
 
-// Lazy-import the search module for internal search
-let searchModule = null;
-function getSearchModule() {
-  if (!searchModule) searchModule = require("./search");
-  return searchModule;
-}
-
 function buildSystemPrompt() {
   const { totalProfiles, totalCountries } = getStats();
   return `You are CoBot, a search tool that combines data from the Murmurations network and OpenStreetMap to provide a directory of ${totalProfiles} co-ops, commons, community organisations, hackerspaces, makerspaces, coworking spaces, repair cafes, zero waste, fair trade, charity and farm shops, organic shops, marketplaces, nature reserves, NGOs, social centres, health food shops, food banks, vegetarian and vegan restaurants, botanical gardens, tool libraries, bike workshops, national parks, bird hides, give boxes, wildlife sanctuaries, eco campsites and Citizen Network members across ${totalCountries} countries.
@@ -37,25 +30,13 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { query, geo, topic, queryType: reqQueryType, showAll, geoNote: reqGeoNote, history = [] } = req.body;
+    const { query, searchResults, queryType: reqQueryType, geoNote: reqGeoNote, history = [] } = req.body;
     if (!query || typeof query !== "string") {
       return res.status(400).json({ error: "Missing query" });
     }
-
-    // Run search internally via a mock req/res to reuse the search endpoint
-    const searchResults = await new Promise((resolve, reject) => {
-      const mockReq = {
-        method: "POST",
-        body: { query, geo, topic, queryType: reqQueryType, showAll },
-        headers: req.headers || {},
-        socket: req.socket,
-      };
-      const mockRes = {
-        status: (code) => ({ json: (data) => reject(new Error(data.error || "Search failed")) }),
-        json: (data) => resolve(data),
-      };
-      getSearchModule()(mockReq, mockRes).catch(reject);
-    });
+    if (!searchResults || !searchResults.results) {
+      return res.status(400).json({ error: "Missing searchResults" });
+    }
 
     const profileList = searchResults.results.slice(0, 8);
     const total = searchResults.totalResults || profileList.length;

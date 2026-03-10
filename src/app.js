@@ -821,10 +821,8 @@ async function handleChat(query) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             query,
-            geo: llmResult?.geo || [],
-            topic: llmResult?.topic || "",
+            searchResults: searchData,
             queryType: queryType || "unknown",
-            showAll: llmResult?.showAll || false,
             geoNote: geoNote || null,
             history: chatHistory.slice(-10),
           }),
