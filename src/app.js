@@ -63,6 +63,10 @@ async function checkChatAvailable() {
 // Map
 // -------------------------------------------------------------------
 
+// CARTO Basemaps API key — required for raster tiles (removes "API key required" watermark).
+// Public client-side key; see https://carto.com/basemaps/apikey
+const CARTO_API_KEY = "cb1_3h5x_1_d710aebcacd83b4d24f8e4f7";
+
 function initMap() {
   const tileVariant = prefersDark ? "dark_all" : "light_all";
   map = new maplibregl.Map({
@@ -73,8 +77,8 @@ function initMap() {
         "carto-basemap": {
           type: "raster",
           tiles: [
-            `https://a.basemaps.cartocdn.com/${tileVariant}/{z}/{x}/{y}@2x.png`,
-            `https://b.basemaps.cartocdn.com/${tileVariant}/{z}/{x}/{y}@2x.png`,
+            `https://a.basemaps.cartocdn.com/${tileVariant}/{z}/{x}/{y}@2x.png?key=${CARTO_API_KEY}`,
+            `https://b.basemaps.cartocdn.com/${tileVariant}/{z}/{x}/{y}@2x.png?key=${CARTO_API_KEY}`,
           ],
           tileSize: 256,
           attribution: '&copy; <a href="https://carto.com">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
