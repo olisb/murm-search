@@ -80,15 +80,15 @@ function cartoSource(variant) {
 }
 
 function initMap() {
-  // Dark mode: CARTO's dark_all labels are too dim (~#666 on near-black) to read
-  // street names, so split into base + labels layers and brighten only the labels.
+  // Dark mode: CARTO's dark_all is too dark to read (labels ~#666 on near-black),
+  // so split into base + labels layers: lift the base a little and the labels a lot.
   const sources = prefersDark
     ? { "carto-basemap": cartoSource("dark_nolabels"), "carto-labels": cartoSource("dark_only_labels") }
     : { "carto-basemap": cartoSource("light_all") };
   const layers = prefersDark
     ? [
         { id: "carto-basemap", type: "raster", source: "carto-basemap", minzoom: 0, maxzoom: 19,
-          paint: { "raster-brightness-min": 0.04 } },
+          paint: { "raster-brightness-min": 0.14 } },
         { id: "carto-labels", type: "raster", source: "carto-labels", minzoom: 0, maxzoom: 19,
           paint: { "raster-brightness-min": 0.5 } },
       ]
