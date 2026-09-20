@@ -67,27 +67,36 @@ async function checkChatAvailable() {
 // Public client-side key; see https://carto.com/basemaps/apikey
 const CARTO_API_KEY = "cb1_3h5x_1_d710aebcacd83b4d24f8e4f7";
 
+function cartoSource(variant) {
+  return {
+    type: "raster",
+    tiles: [
+      `https://a.basemaps.cartocdn.com/${variant}/{z}/{x}/{y}@2x.png?key=${CARTO_API_KEY}`,
+      `https://b.basemaps.cartocdn.com/${variant}/{z}/{x}/{y}@2x.png?key=${CARTO_API_KEY}`,
+    ],
+    tileSize: 256,
+    attribution: '&copy; <a href="https://carto.com">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+  };
+}
+
 function initMap() {
-  const tileVariant = prefersDark ? "dark_all" : "light_all";
+  // Dark mode: CARTO's dark_all labels are too dim (~#666 on near-black) to read
+  // street names, so split into base + labels layers and brighten only the labels.
+  const sources = prefersDark
+    ? { "carto-basemap": cartoSource("dark_nolabels"), "carto-labels": cartoSource("dark_only_labels") }
+    : { "carto-basemap": cartoSource("light_all") };
+  const layers = prefersDark
+    ? [
+        { id: "carto-basemap", type: "raster", source: "carto-basemap", minzoom: 0, maxzoom: 19,
+          paint: { "raster-brightness-min": 0.04 } },
+        { id: "carto-labels", type: "raster", source: "carto-labels", minzoom: 0, maxzoom: 19,
+          paint: { "raster-brightness-min": 0.5 } },
+      ]
+    : [{ id: "carto-basemap", type: "raster", source: "carto-basemap", minzoom: 0, maxzoom: 19 }];
+
   map = new maplibregl.Map({
     container: "map",
-    style: {
-      version: 8,
-      sources: {
-        "carto-basemap": {
-          type: "raster",
-          tiles: [
-            `https://a.basemaps.cartocdn.com/${tileVariant}/{z}/{x}/{y}@2x.png?key=${CARTO_API_KEY}`,
-            `https://b.basemaps.cartocdn.com/${tileVariant}/{z}/{x}/{y}@2x.png?key=${CARTO_API_KEY}`,
-          ],
-          tileSize: 256,
-          attribution: '&copy; <a href="https://carto.com">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-        },
-      },
-      layers: [
-        { id: "carto-basemap", type: "raster", source: "carto-basemap", minzoom: 0, maxzoom: 19 },
-      ],
-    },
+    style: { version: 8, sources, layers },
     center: [0, 30],
     zoom: 2,
   });
